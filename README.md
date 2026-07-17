@@ -12,6 +12,9 @@ correções de negócio aplicadas.
 - **Backend:** Django 5 + Django REST Framework + SimpleJWT (`backend/`)
 - **Frontend:** React 18 + Vite + Material UI 7 + axios + Recharts + @dnd-kit (`frontend/`)
 
+> 📚 **Documentação completa em [`docs/`](docs/README.md)** — arquitetura, backend,
+> API, frontend, banco, regras de negócio, configuração, desenvolvimento e operação.
+
 ---
 
 ## O que mudou em relação ao MVP (correções aplicadas)
