@@ -87,9 +87,6 @@ function FunilInner() {
             <Box component="img" src={logoSejaAp} alt="SEJA AP" sx={{ height: 48, objectFit: "contain" }} />
             <Divider orientation="vertical" flexItem sx={{ display: { xs: "none", sm: "block" } }} />
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, lineHeight: 1.1 }}>
-                Funil de Resgate
-              </Typography>
               <Typography
                 variant="caption"
                 sx={{
