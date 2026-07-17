@@ -1,0 +1,18 @@
+# Normaliza quebras de linha: texto sempre com LF no repositório.
+# Elimina os avisos "LF will be replaced by CRLF" no Windows.
+* text=auto eol=lf
+
+# Scripts que precisam de LF mesmo em checkout Windows
+*.sh text eol=lf
+
+# Arquivos binários — nunca normalizar
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

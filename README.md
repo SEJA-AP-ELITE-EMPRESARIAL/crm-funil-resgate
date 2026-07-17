@@ -1,5 +1,7 @@
 # CRM — Funil de Resgate (Win-back)
 
+[![CI](https://github.com/SEJA-AP-ELITE-EMPRESARIAL/crm-funil-resgate/actions/workflows/ci.yml/badge.svg)](https://github.com/SEJA-AP-ELITE-EMPRESARIAL/crm-funil-resgate/actions/workflows/ci.yml)
+
 CRM para reativação de clientes cancelados: priorização → contato → diagnóstico →
 proposta → **reativação**, com Kanban, Dashboard e Comissionamento.
 
