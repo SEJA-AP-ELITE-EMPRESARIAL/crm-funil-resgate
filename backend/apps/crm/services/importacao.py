@@ -53,19 +53,38 @@ COLUNAS = {
     "data onboarding": "data_onboarding", "data offboarding": "data_offboarding",
     "qtd socios": "qtd_socios", "socios": "qtd_socios",
     "lt": "lt",
+    # Indicação (funil Indicados APN)
+    "prioridade": "prioridade",
+    "faixa": "faixa_faturamento", "faixa de faturamento": "faixa_faturamento",
+    "faixa de faturamento (proxy)": "faixa_faturamento",
+    "indicado por": "indicador_nome", "indicador": "indicador_nome",
+    "nome do indicador": "indicador_nome",
+    "empresa do indicador": "indicador_empresa", "empresa indicador": "indicador_empresa",
+    "whatsapp do indicador": "indicador_whatsapp", "whatsapp indicador": "indicador_whatsapp",
+    "equipe do indicador": "indicador_equipe", "equipe": "indicador_equipe",
+    "equipe indicador": "indicador_equipe",
+    "qtd indicacoes": "qtd_indicacoes", "qtd de indicacoes": "qtd_indicacoes",
+    "qtd. de indicacoes": "qtd_indicacoes", "qtd. de indicacoes do indicador": "qtd_indicacoes",
 }
 
 # Colunas do modelo, na ordem de exibição.
 MODELO_COLUNAS = [
     "Funil", "Nome / Empresa", "Etapa", "Consultor", "Telefone", "Email", "CNPJ",
     "Segmento", "Municipio", "Estado", "Produto atual", "Motivo distrato",
+    # Indicação (relevante no funil Indicados APN)
+    "Prioridade", "Faixa de faturamento", "Indicado por", "Empresa do indicador",
+    "WhatsApp do indicador", "Equipe do indicador", "Qtd indicacoes",
+    # Contrato / observações
     "Valor contrato", "Meses contrato", "Notas",
 ]
 
 MODELO_EXEMPLO = [
     "Resgate", "Empresa Exemplo Ltda", "Priorizado", "Ana Souza", "(11) 99999-0000",
     "contato@exemplo.com", "12.345.678/0001-90", "Serviços", "São Paulo", "SP",
-    "Plano Pro", "Preço", "12000,00", "12", "Cliente veio por indicação.",
+    "Plano Pro", "Preço",
+    "P2", "R$ 500k a 1MM", "João Indicador", "Indicadora Ltda",
+    "(11) 98888-0000", "Equipe Alpha", "3",
+    "12000,00", "12", "Cliente veio por indicação.",
 ]
 
 
@@ -174,7 +193,7 @@ def importar_clientes(arquivo, usuario=None) -> dict:
                     dados["etapa"] = e
                 elif campo == "valor_contrato":
                     dados["valor_contrato"] = _parse_valor(valor)
-                elif campo in ("meses_contrato", "qtd_socios"):
+                elif campo in ("meses_contrato", "qtd_socios", "qtd_indicacoes"):
                     dados[campo] = _parse_int(valor)
                 else:
                     dados[campo] = str(valor).strip()
