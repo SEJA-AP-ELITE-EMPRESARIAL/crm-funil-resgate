@@ -1,0 +1,32 @@
+# Blueprint do Render — backend Django do CRM.
+# No Render: New + → "Blueprint" → aponta para este repositório.
+# As variáveis com "sync: false" você preenche no painel (são segredos).
+services:
+  - type: web
+    name: crm-funil-resgate-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements-prod.txt && python manage.py collectstatic --noinput"
+    startCommand: "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+    healthCheckPath: /api/crm/config/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: DJANGO_DEBUG
+        value: "false"
+      # Render gera um SECRET_KEY forte automaticamente.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "localhost,127.0.0.1"
+      # Conexão do Supabase (Session pooler). Preencher no painel do Render.
+      - key: DATABASE_URL
+        sync: false
+      # URL do frontend no Cloudflare Pages (ex.: https://crm-x.pages.dev). Preencher no painel.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CRM_COMISSAO_RATE
+        value: "0.03"
+      - key: CRM_MESES_CONTRATO_PADRAO
+        value: "12"

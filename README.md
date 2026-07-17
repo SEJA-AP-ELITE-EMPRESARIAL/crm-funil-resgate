@@ -105,10 +105,28 @@ cd backend && python manage.py test apps.crm     # 6 testes
 cd frontend && npm run build                       # valida a compilação
 ```
 
-## Produção (notas)
+## Deploy (produção)
 
-- Backend: `pip install -r requirements-prod.txt` (Postgres + gunicorn) e
-  `CRM_DB_ENGINE=postgres` no `.env`. Rodar `collectstatic` e servir via gunicorn.
-- Frontend: `npm run build` gera `dist/`; sirva atrás de um proxy reverso que
-  encaminhe `/api` para o Django (ou aponte `VITE_API_URL` no build).
-- Troque `DJANGO_SECRET_KEY`, ajuste `DJANGO_ALLOWED_HOSTS` e `CORS_ALLOWED_ORIGINS`.
+Arquitetura: **frontend no Cloudflare Pages** + **backend Django no Render** +
+**banco no Supabase**.
+
+### Backend — Render
+1. Render → New + → **Blueprint** → seleciona este repositório (usa o `render.yaml`).
+2. No serviço, defina as variáveis marcadas como segredo:
+   - `DATABASE_URL` — string do **Session pooler** do Supabase
+     (`postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres`).
+   - `CORS_ALLOWED_ORIGINS` — a URL do frontend no Cloudflare (ex.: `https://crm-x.pages.dev`).
+3. Deploy. O build roda `collectstatic`; o start roda `migrate` + `gunicorn`.
+   `DJANGO_SECRET_KEY` é gerado pelo Render; `RENDER_EXTERNAL_HOSTNAME` entra no
+   `ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS` automaticamente.
+
+### Frontend — Cloudflare Pages
+1. Cloudflare → Workers & Pages → Create → **Pages** → conecta o repositório.
+2. Build settings: **Root directory** `frontend` · **Build command** `npm run build`
+   · **Output** `dist`.
+3. Environment variable: `VITE_API_URL` = URL do backend no Render
+   (ex.: `https://crm-funil-resgate-api.onrender.com`).
+4. O `public/_redirects` já faz o fallback de SPA.
+
+Depois do primeiro deploy do frontend, volte ao Render e ajuste
+`CORS_ALLOWED_ORIGINS` com o domínio final do Pages.
