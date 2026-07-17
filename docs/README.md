@@ -1,4 +1,4 @@
-# Documentação — Conecta_CRM (Funil de Resgate)
+# Documentação — Conecta_CRM
 
 CRM multi-funil para prospecção e reativação de clientes, construído na stack do
 ConectaAP (Django/DRF + React/MUI) com banco no Supabase. Rodando em produção nas

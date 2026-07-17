@@ -2,10 +2,10 @@
 
 ## O que é
 
-O **Conecta_CRM** (nome interno; título do produto: *Funil de Resgate*) é um CRM de
-funis de vendas/relacionamento usado pela SEJA AP para organizar a prospecção e a
-reativação de clientes. Cada cliente/lead é um cartão que percorre etapas até o
-fechamento ("Reativado").
+O **Conecta_CRM** é um CRM de funis de vendas/relacionamento usado pela SEJA AP para
+organizar a prospecção e a reativação de clientes. Cada cliente/lead é um cartão que
+percorre etapas até o fechamento ("Reativado"). ("Resgate" é um dos três funis — não
+o nome do produto.)
 
 Origem: nasceu como MVP no Lovable (React + Supabase) e foi **reconstruído na stack
 do ConectaAP** para virar a primeira versão do Conecta_CRM, com backend próprio
@@ -15,7 +15,7 @@ do ConectaAP** para virar a primeira versão do Conecta_CRM, com backend própri
 
 - **Consultores / equipe comercial:** trabalham os cartões no Kanban, arrastando
   entre etapas, registrando dados e valores.
-- **Gestão:** acompanha Dashboard (conversão, rankings) e Comissionamento.
+- **Gestão:** acompanha Dashboard (conversão, prioridade) e Comissionamento.
 - **Admin:** gerencia funis e a base pelo Django Admin.
 
 ## Os 3 funis
@@ -38,8 +38,8 @@ próprias por funil no futuro).
   e selo de prioridade (P1–P5) nos cartões.
 - **Cadastro/edição de cliente** com formulário que se adapta ao funil (ex.: bloco
   "Indicação" só no Indicados APN).
-- **Dashboard:** KPIs, funil de conversão (gráfico), rankings de consultores e
-  análise por motivo de distrato.
+- **Dashboard:** KPIs, funil de conversão (gráfico), distribuição por prioridade
+  (P1–P5) e análise por motivo de distrato.
 - **Comissionamento:** comissão recorrente por responsável, parametrizada pela
   duração do contrato.
 - **Importação de Excel** (.xlsx) com modelo para download e relatório de erros,

@@ -61,8 +61,10 @@ auditoria. Ver [02 — permissões](02-backend.md).
 - `POST /api/crm/clientes/importar/` com um `.xlsx`.
 - 1ª linha = cabeçalhos (tolerante a acento/maiúscula). Colunas reconhecidas:
   **Funil**, **Nome / Empresa** (obrigatória), Etapa, Consultor, Telefone, Email,
-  CNPJ, Segmento, Município, Estado, Produto atual, Motivo distrato, Valor contrato,
-  Meses contrato, Notas.
+  CNPJ, Segmento, Município, Estado, Produto atual, Motivo distrato,
+  Prioridade, Faixa de faturamento, Indicado por, Empresa do indicador,
+  WhatsApp do indicador, Equipe do indicador, Qtd indicacoes,
+  Valor contrato, Meses contrato, Notas.
 - Resolve Funil (por nome/slug) e Etapa (por rótulo/slug); valida linha a linha e
   devolve `{ criados, total, erros: [{linha, erro}] }`.
 - Há um **modelo** para download (`GET /api/crm/clientes/modelo-importacao/`).

@@ -95,8 +95,9 @@ empresa, WhatsApp, equipe, prioridade, faixa, qtd) e somem os campos de win-back
 
 ### Dashboard
 KPIs (base, no funil, em andamento, reativados, taxa, valor recuperado), gráfico de
-conversão por etapa (Recharts, barras horizontais), rankings de consultores
-(reativações e valor) e análise por motivo de distrato.
+conversão por etapa (Recharts), **distribuição por prioridade** (P1–P5, com as cores
+da prioridade) e análise por motivo de distrato. Os tooltips dos gráficos usam texto
+branco.
 
 ### Comissionamento
 Tabela por responsável: resgates, valor de contrato, parcela mensal e comissão
