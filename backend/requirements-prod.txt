@@ -1,0 +1,9 @@
+# Dependências para Postgres/Supabase + WSGI.
+# Instale com:  pip install -r requirements-prod.txt
+-r requirements.txt
+
+# Driver Postgres (psycopg v3 — tem wheels para Windows/Python 3.13 e é
+# suportado nativamente pelo Django 5).
+psycopg[binary]==3.2.3
+
+gunicorn==23.0.0

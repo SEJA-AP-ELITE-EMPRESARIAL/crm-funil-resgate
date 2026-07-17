@@ -1,0 +1,9 @@
+# CRM Funil de Resgate — backend (core)
+# Roda em dev com SQLite, zero dependência nativa.
+# Para Postgres/produção use também requirements-prod.txt.
+Django==5.0.9
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.4.0
+python-dotenv==1.0.1
+openpyxl==3.1.5
