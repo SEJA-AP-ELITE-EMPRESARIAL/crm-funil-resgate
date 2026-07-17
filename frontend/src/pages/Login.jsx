@@ -64,10 +64,7 @@ export default function Login() {
             bgcolor: (t) => t.palette.surface.elevated,
           }}
         >
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>
-            Funil de Resgate
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 3 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Acesse com seu e-mail e senha cadastrados.
           </Typography>
 

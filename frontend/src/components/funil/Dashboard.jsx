@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import ApartmentRoundedIcon from "@mui/icons-material/ApartmentRounded";
 import BoltRoundedIcon from "@mui/icons-material/BoltRounded";
 import EmojiEventsRoundedIcon from "@mui/icons-material/EmojiEventsRounded";
+import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import TrackChangesRoundedIcon from "@mui/icons-material/TrackChangesRounded";
 import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
@@ -25,6 +26,9 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 
 import { useClientesData } from "@/contexts/ClientesContext";
 import { fmtBRL, num } from "@/lib/format";
 import { PROGRESS_STAGES, STAGE_META } from "@/lib/stages";
+
+// Cores da prioridade (P1 = mais quente → P5 = mais fria).
+const PRIO_COLORS = { P1: "#DC3545", P2: "#EA932E", P3: "#E4B744", P4: "#3D7EC5", P5: "#8A8A8A" };
 
 function KpiCard({ label, value, icon: Icon, color }) {
   return (
@@ -124,15 +128,18 @@ export function Dashboard() {
     return [...map.entries()].map(([nome, s]) => ({ nome, ...s, taxa: s.prio ? s.reat / s.prio : 0 }));
   }, [clientes]);
 
-  const rankingReat = useMemo(
-    () => [...consultores].sort((a, b) => b.reat - a.reat || b.valor - a.valor || b.prio - a.prio),
-    [consultores],
-  );
-  const rankingValor = useMemo(
-    () => [...consultores].sort((a, b) => b.valor - a.valor || b.reat - a.reat),
-    [consultores],
-  );
   const valorTotal = useMemo(() => consultores.reduce((a, c) => a + c.valor, 0), [consultores]);
+
+  const prioridades = useMemo(() => {
+    const ordem = ["P1", "P2", "P3", "P4", "P5"];
+    const cont = Object.fromEntries(ordem.map((p) => [p, 0]));
+    clientes.forEach((c) => {
+      const p = (c.prioridade || "").toUpperCase();
+      if (cont[p] != null) cont[p] += 1;
+    });
+    return ordem.map((p) => ({ prioridade: p, qtd: cont[p], color: PRIO_COLORS[p] }));
+  }, [clientes]);
+  const totalPrioridades = prioridades.reduce((a, p) => a + p.qtd, 0);
 
   const motivos = useMemo(() => {
     const map = new Map();
@@ -181,6 +188,9 @@ export function Dashboard() {
                 borderRadius: 8,
                 fontSize: 12,
               }}
+              labelStyle={{ color: "#fff", fontWeight: 600 }}
+              itemStyle={{ color: "#fff" }}
+              formatter={(value) => [value, "Clientes"]}
             />
             <Bar dataKey="qty" radius={[0, 6, 6, 0]}>
               {funnelData.map((d) => (
@@ -191,77 +201,37 @@ export function Dashboard() {
         </ResponsiveContainer>
       </PanelCard>
 
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <PanelCard title="Ranking — Reativações" subtitle="Consultores ordenados pelo número de reativações." icon={EmojiEventsRoundedIcon}>
-            <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: "background.default" }}>
-                    <TableCell>#</TableCell>
-                    <TableCell>Consultor</TableCell>
-                    <TableCell align="right">Reat</TableCell>
-                    <TableCell align="right">Prio</TableCell>
-                    <TableCell align="right">Taxa</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rankingReat.slice(0, 12).map((c, i) => (
-                    <TableRow key={c.nome} hover>
-                      <TableCell sx={{ fontWeight: 700, color: "primary.main" }}>{i + 1}º</TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>{c.nome}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600, color: "success.main" }}>{c.reat}</TableCell>
-                      <TableCell align="right">{c.prio}</TableCell>
-                      <TableCell align="right">{(c.taxa * 100).toFixed(0)}%</TableCell>
-                    </TableRow>
-                  ))}
-                  {rankingReat.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} align="center" sx={{ color: "text.secondary", py: 3 }}>
-                        Sem dados
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </PanelCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, lg: 6 }}>
-          <PanelCard title="Ranking — Valor Recuperado" subtitle="Consultores ordenados pelo valor de contratos resgatados." icon={PaidRoundedIcon}>
-            <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: "background.default" }}>
-                    <TableCell>#</TableCell>
-                    <TableCell>Consultor</TableCell>
-                    <TableCell align="right">Valor</TableCell>
-                    <TableCell align="right">Reat</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {rankingValor.slice(0, 12).map((c, i) => (
-                    <TableRow key={c.nome} hover>
-                      <TableCell sx={{ fontWeight: 700, color: "primary.main" }}>{i + 1}º</TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>{c.nome}</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600, color: "primary.main" }}>{fmtBRL(c.valor)}</TableCell>
-                      <TableCell align="right" sx={{ color: "success.main" }}>{c.reat}</TableCell>
-                    </TableRow>
-                  ))}
-                  {rankingValor.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} align="center" sx={{ color: "text.secondary", py: 3 }}>
-                        Sem dados
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </PanelCard>
-        </Grid>
-      </Grid>
+      <PanelCard title="Distribuição por Prioridade" subtitle="Leads por prioridade — P1 é a mais quente, P5 a mais fria." icon={FlagRoundedIcon}>
+        {totalPrioridades > 0 ? (
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={prioridades} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <XAxis dataKey="prioridade" stroke={theme.palette.text.secondary} fontSize={12} />
+              <YAxis allowDecimals={false} stroke={theme.palette.text.secondary} fontSize={12} />
+              <Tooltip
+                cursor={{ fill: alpha(theme.palette.primary.main, 0.08) }}
+                contentStyle={{
+                  background: theme.palette.background.paper,
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "#fff", fontWeight: 600 }}
+                itemStyle={{ color: "#fff" }}
+                formatter={(value) => [value, "Clientes"]}
+              />
+              <Bar dataKey="qtd" radius={[6, 6, 0, 0]}>
+                {prioridades.map((d) => (
+                  <Cell key={d.prioridade} fill={d.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <Box sx={{ py: 6, textAlign: "center", color: "text.secondary" }}>
+            Sem prioridade definida neste funil.
+          </Box>
+        )}
+      </PanelCard>
 
       <PanelCard title="Análise por Motivo de Distrato" subtitle="Onde estão as maiores oportunidades de win-back.">
         <TableContainer>
