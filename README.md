@@ -105,28 +105,19 @@ cd backend && python manage.py test apps.crm     # 6 testes
 cd frontend && npm run build                       # valida a compilação
 ```
 
-## Deploy (produção)
+## Deploy (produção) — Conecta_CRM na VPS
 
-Arquitetura: **frontend no Cloudflare Pages** + **backend Django no Render** +
-**banco no Supabase**.
+Roda como stack Docker isolada (`docker-compose.yml`, projeto `conecta-crm`) na
+mesma VPS do Conecta, atrás do **nginx do host** (que termina o TLS via Cloudflare
+Origin Certificate), sob um **subdomínio** — banco no **Supabase**.
 
-### Backend — Render
-1. Render → New + → **Blueprint** → seleciona este repositório (usa o `render.yaml`).
-2. No serviço, defina as variáveis marcadas como segredo:
-   - `DATABASE_URL` — string do **Session pooler** do Supabase
-     (`postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres`).
-   - `CORS_ALLOWED_ORIGINS` — a URL do frontend no Cloudflare (ex.: `https://crm-x.pages.dev`).
-3. Deploy. O build roda `collectstatic`; o start roda `migrate` + `gunicorn`.
-   `DJANGO_SECRET_KEY` é gerado pelo Render; `RENDER_EXTERNAL_HOSTNAME` entra no
-   `ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS` automaticamente.
+```
+conecta-crm.sejaap.com.br ──Cloudflare──▶ nginx do host ──▶ [frontend nginx] ──/api──▶ [backend gunicorn] ──▶ Supabase
+```
 
-### Frontend — Cloudflare Pages
-1. Cloudflare → Workers & Pages → Create → **Pages** → conecta o repositório.
-2. Build settings: **Root directory** `frontend` · **Build command** `npm run build`
-   · **Output** `dist`.
-3. Environment variable: `VITE_API_URL` = URL do backend no Render
-   (ex.: `https://crm-funil-resgate-api.onrender.com`).
-4. O `public/_redirects` já faz o fallback de SPA.
+Frontend e API ficam na **mesma origem** (o nginx do container faz proxy de `/api`),
+então **não há CORS**. O passo a passo completo (Cloudflare DNS, clone na VPS,
+`docker compose up`, nginx do host) está em [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
 
-Depois do primeiro deploy do frontend, volte ao Render e ajuste
-`CORS_ALLOWED_ORIGINS` com o domínio final do Pages.
+Artefatos: `backend/Dockerfile`, `frontend/Dockerfile` + `frontend/nginx.conf`,
+`docker-compose.yml`, `deploy/.env.prod.example`, `deploy/nginx-host-conecta-crm.conf`.
