@@ -15,6 +15,11 @@ import { StageColumn } from "@/components/funil/StageColumn";
 import { useClientesData } from "@/contexts/ClientesContext";
 import { STAGES, STAGE_META } from "@/lib/stages";
 
+// Altura do board limitada à viewport (descontando header + filtros), para que a
+// barra de rolagem horizontal fique sempre visível sem precisar descer a página.
+// As colunas rolam verticalmente por dentro. Em telas pequenas, deixa a página rolar.
+const BOARD_HEIGHT = { xs: "auto", md: "calc(100vh - 210px)" };
+
 export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
   const { clientesDoFunil: clientes, loading, moverEtapa } = useClientesData();
   const [activeId, setActiveId] = useState(null);
@@ -72,7 +77,7 @@ export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
 
   if (loading) {
     return (
-      <Stack direction="row" spacing={2} sx={{ overflowX: "auto", pb: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ overflowX: "auto", pb: 2, height: BOARD_HEIGHT }}>
         {STAGES.map((s) => (
           <Box key={s} sx={{ width: 288, flexShrink: 0 }}>
             <Skeleton height={28} width={128} sx={{ mb: 1 }} />
@@ -87,7 +92,11 @@ export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
   return (
     <>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <Stack direction="row" spacing={2} sx={{ overflowX: "auto", pb: 2 }}>
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ overflowX: "auto", overflowY: "hidden", pb: 2, height: BOARD_HEIGHT, alignItems: "stretch" }}
+        >
           {STAGES.map((stage) => (
             <StageColumn key={stage} stage={stage} clientes={byStage[stage]} onEdit={setEditando} />
           ))}

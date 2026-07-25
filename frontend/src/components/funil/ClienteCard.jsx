@@ -50,6 +50,7 @@ function ClienteCardBase({ cliente, overlay = false, onEdit }) {
       onClick={handleClick}
       sx={{
         cursor: "grab",
+        flexShrink: 0,
         borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",

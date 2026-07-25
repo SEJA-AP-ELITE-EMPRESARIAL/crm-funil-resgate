@@ -10,7 +10,7 @@ export function StageColumn({ stage, clientes, onEdit }) {
   const meta = STAGE_META[stage];
 
   return (
-    <Box sx={{ width: 288, flexShrink: 0, display: "flex", flexDirection: "column" }}>
+    <Box sx={{ width: 288, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 0.5, mb: 1.5 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: meta.color }} />
@@ -36,8 +36,9 @@ export function StageColumn({ stage, clientes, onEdit }) {
       <Box
         ref={setNodeRef}
         sx={{
-          minHeight: 400,
           flex: 1,
+          minHeight: { xs: 400, md: 0 },
+          overflowY: "auto",
           display: "flex",
           flexDirection: "column",
           gap: 1,
