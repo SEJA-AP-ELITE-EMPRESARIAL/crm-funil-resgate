@@ -2,26 +2,42 @@
 from django.contrib import admin, messages
 from django.utils.html import format_html
 
-from apps.crm.models import ApiKey, Cliente, Funil
+from apps.crm.models import ApiKey, Cliente, Etapa, Funil
 
-# Cores das etapas (espelham o design system do funil).
-_ETAPA_CORES = {
-    "priorizado": "#E4B744",
-    "contato_realizado": "#EA932E",
-    "conectado": "#E77123",
-    "diagnostico": "#DF5B3A",
-    "proposta": "#B069D3",
-    "reativado": "#31C47F",
-    "perdido": "#666666",
-}
+
+def _badge(cor, texto):
+    return format_html(
+        '<span style="background:{}22;color:{};border:1px solid {}55;'
+        'padding:2px 8px;border-radius:6px;font-weight:600;font-size:11px">{}</span>',
+        cor, cor, cor, texto,
+    )
+
+
+class EtapaInline(admin.TabularInline):
+    """Colunas do Kanban, editáveis junto do funil."""
+
+    model = Etapa
+    extra = 0
+    fields = ("ordem", "emoji", "nome", "slug", "cor", "tipo", "total_clientes")
+    readonly_fields = ("total_clientes",)
+    ordering = ("ordem", "id")
+
+    @admin.display(description="Clientes")
+    def total_clientes(self, obj):
+        return obj.clientes.count() if obj.pk else "—"
 
 
 @admin.register(Funil)
 class FunilAdmin(admin.ModelAdmin):
-    list_display = ("nome", "slug", "cor_badge", "ativo", "ordem", "total_clientes")
+    list_display = ("nome", "slug", "cor_badge", "ativo", "ordem", "total_etapas", "total_clientes")
     list_editable = ("ativo", "ordem")
     prepopulated_fields = {"slug": ("nome",)}
     search_fields = ("nome", "slug")
+    inlines = [EtapaInline]
+
+    @admin.display(description="Colunas")
+    def total_etapas(self, obj):
+        return obj.etapas.count()
 
     @admin.display(description="Cor")
     def cor_badge(self, obj):
@@ -51,7 +67,7 @@ class ClienteAdmin(admin.ModelAdmin):
     )
     list_filter = ("funil", "etapa", "quem_fara_contato", "estado", "segmento", "motivo_distrato")
     search_fields = ("nome", "cnpj", "email", "quem_fara_contato", "municipio")
-    list_select_related = ("criado_por", "funil")
+    list_select_related = ("criado_por", "funil", "etapa")
     date_hierarchy = "criado_em"
     ordering = ("ordem", "nome")
     readonly_fields = ("criado_em", "atualizado_em", "criado_por")
@@ -70,16 +86,11 @@ class ClienteAdmin(admin.ModelAdmin):
         ("Metadados", {"fields": ("criado_por", "criado_em", "atualizado_em")}),
     )
 
-    @admin.display(description="Etapa", ordering="etapa")
+    @admin.display(description="Etapa", ordering="etapa__ordem")
     def etapa_badge(self, obj):
-        if not obj.etapa:
+        if not obj.etapa_id:
             return format_html('<span style="color:#999">—</span>')
-        cor = _ETAPA_CORES.get(obj.etapa, "#666")
-        return format_html(
-            '<span style="background:{}22;color:{};border:1px solid {}55;'
-            'padding:2px 8px;border-radius:6px;font-weight:600;font-size:11px">{}</span>',
-            cor, cor, cor, obj.get_etapa_display(),
-        )
+        return _badge(obj.etapa.cor or "#666", obj.etapa.rotulo)
 
     @admin.display(description="Valor contrato", ordering="valor_contrato")
     def valor_contrato_fmt(self, obj):
@@ -92,6 +103,26 @@ class ClienteAdmin(admin.ModelAdmin):
         if not obj.valor_contrato:
             return "—"
         return f"R$ {obj.comissao_mensal:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@admin.register(Etapa)
+class EtapaAdmin(admin.ModelAdmin):
+    """As colunas também se gerenciam pelo Kanban; aqui é para curadoria."""
+
+    list_display = ("nome_badge", "funil", "slug", "ordem", "tipo", "total_clientes")
+    list_filter = ("funil", "tipo")
+    list_editable = ("ordem",)
+    search_fields = ("nome", "slug")
+    list_select_related = ("funil",)
+    ordering = ("funil__ordem", "ordem")
+
+    @admin.display(description="Coluna", ordering="nome")
+    def nome_badge(self, obj):
+        return _badge(obj.cor or "#666", obj.rotulo)
+
+    @admin.display(description="Clientes")
+    def total_clientes(self, obj):
+        return obj.clientes.count()
 
 
 @admin.register(ApiKey)

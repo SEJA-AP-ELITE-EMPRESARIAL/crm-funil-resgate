@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.crm.views import auth_views, cliente_views, funil_views, import_views
+from apps.crm.views import auth_views, cliente_views, etapa_views, funil_views, import_views
 
 app_name = "crm"
 
@@ -10,6 +10,10 @@ urlpatterns = [
     path("config/", auth_views.config, name="config"),
     # Funis
     path("funis/", funil_views.funil_list, name="funil_list"),
+    # Etapas (colunas do Kanban)
+    path("etapas/", etapa_views.etapa_root, name="etapa_root"),
+    path("etapas/reordenar/", etapa_views.etapa_reordenar, name="etapa_reordenar"),
+    path("etapas/<int:etapa_id>/", etapa_views.etapa_item, name="etapa_item"),
     # Clientes (CRUD)
     path("clientes/", cliente_views.cliente_root, name="cliente_root"),
     path("clientes/importar/", import_views.importar, name="cliente_importar"),

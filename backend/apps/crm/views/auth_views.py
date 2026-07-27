@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.crm.models import ApiKey, EtapaFunil
+from apps.crm.models import ApiKey
 
 User = get_user_model()
 
@@ -64,9 +64,13 @@ def me(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def config(request):
-    """Regra de negócio + metadados das etapas (para o front)."""
+    """Regra de negócio global.
+
+    As etapas saíram daqui: deixaram de ser uma lista global e passaram a
+    pertencer a cada funil — venha buscá-las em `/api/crm/funis/` (embutidas em
+    cada funil) ou em `/api/crm/etapas/?funil=<id|slug>`.
+    """
     return Response({
         "comissao_rate": float(getattr(settings, "CRM_COMISSAO_RATE", 0.03)),
         "meses_contrato_padrao": int(getattr(settings, "CRM_MESES_CONTRATO_PADRAO", 12)),
-        "etapas": [{"value": v, "label": l} for v, l in EtapaFunil.choices],
     })

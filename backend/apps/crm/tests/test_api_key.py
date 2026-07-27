@@ -16,7 +16,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.crm.models import ApiKey, Cliente, EscopoApiKey
+from apps.crm.models import ApiKey, Cliente, EscopoApiKey, Funil
 from apps.crm.throttling import ApiKeyRateThrottle
 
 User = get_user_model()
@@ -52,6 +52,7 @@ class ApiKeyAuthTests(TestCase):
         self.escrita, self.chave_escrita = ApiKey.gerar(
             "n8n escrita", self.integracao, escopo=EscopoApiKey.ESCRITA
         )
+        self.apn = Funil.objects.get(slug="indicados_apn")
         self.client = APIClient()
 
     def _com_chave(self, chave):
@@ -111,7 +112,7 @@ class ApiKeyAuthTests(TestCase):
     def test_escopo_escrita_cria_e_atualiza(self):
         resp = self.client.post(
             "/api/crm/clientes/",
-            {"nome": "Via integração", "etapa": "priorizado"},
+            {"funil": self.apn.id, "nome": "Via integração", "etapa": "priorizado"},
             **self._com_chave(self.chave_escrita),
         )
         self.assertEqual(resp.status_code, 201)
@@ -121,11 +122,11 @@ class ApiKeyAuthTests(TestCase):
         cliente_id = resp.data["id"]
         resp = self.client.patch(
             f"/api/crm/clientes/{cliente_id}/",
-            {"etapa": "conectado"},
+            {"etapa": "em_conversa"},
             **self._com_chave(self.chave_escrita),
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.data["etapa"], "conectado")
+        self.assertEqual(resp.data["etapa_slug"], "em_conversa")
 
     def test_me_identifica_a_chave(self):
         resp = self.client.get("/api/crm/me/", **self._com_chave(self.chave_leitura))

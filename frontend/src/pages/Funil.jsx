@@ -4,7 +4,6 @@ import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import FilterAltRoundedIcon from "@mui/icons-material/FilterAltRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
-import PercentRoundedIcon from "@mui/icons-material/PercentRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import ViewKanbanRoundedIcon from "@mui/icons-material/ViewKanbanRounded";
@@ -25,7 +24,6 @@ import {
 import { alpha } from "@mui/material/styles";
 
 import logoSejaAp from "@/assets/logo-sejaap.png";
-import { Comissionamento } from "@/components/funil/Comissionamento";
 import { Dashboard } from "@/components/funil/Dashboard";
 import { ClienteFormDialog } from "@/components/funil/ClienteFormDialog";
 import { ImportarDialog } from "@/components/funil/ImportarDialog";
@@ -37,15 +35,14 @@ const MAX_W = 1600;
 
 function FunilInner() {
   const { user, logout } = useAuth();
-  const { clientesDoFunil: clientes, funis, funilSel, setFunilSel } = useClientesData();
+  const { clientesDoFunil: clientes, etapas, funis, funilSel, setFunilSel, funilAtivo } =
+    useClientesData();
   const [tab, setTab] = useState("kanban");
   const [search, setSearch] = useState("");
   const [consultor, setConsultor] = useState("all");
   const [motivo, setMotivo] = useState("all");
   const [criando, setCriando] = useState(false);
   const [importando, setImportando] = useState(false);
-
-  const funilAtivo = funis.find((f) => f.slug === funilSel) || null;
 
   const consultores = useMemo(() => {
     const s = new Set();
@@ -60,7 +57,9 @@ function FunilInner() {
   }, [clientes]);
 
   const noFunil = clientes.filter((c) => !!c.etapa).length;
-  const reat = clientes.filter((c) => c.etapa === "reativado").length;
+  // "ganho" é o tipo da coluna que fecha o funil — o nome dela muda de funil
+  // para funil ("Inscrito", "Reativado"...), então contamos pelo tipo.
+  const ganhos = clientes.filter((c) => c.etapa_tipo === "ganho").length;
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
@@ -97,7 +96,7 @@ function FunilInner() {
                   fontWeight: 500,
                 }}
               >
-                {funilAtivo ? funilAtivo.nome : "Todos os funis"} · {clientes.length} na base · {noFunil} no funil · {reat} reativados
+                {funilAtivo?.nome ?? "—"} · {clientes.length} na base · {etapas.length} colunas · {noFunil} no funil · {ganhos} ganhos
               </Typography>
             </Box>
           </Stack>
@@ -193,7 +192,6 @@ function FunilInner() {
                 ),
               }}
             >
-              <MenuItem value="all">Todos os funis</MenuItem>
               {funis.map((f) => (
                 <MenuItem key={f.slug} value={f.slug}>
                   <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
@@ -210,7 +208,6 @@ function FunilInner() {
             >
               <Tab value="kanban" icon={<ViewKanbanRoundedIcon fontSize="small" />} iconPosition="start" label="Kanban" />
               <Tab value="dashboard" icon={<DashboardRoundedIcon fontSize="small" />} iconPosition="start" label="Dashboard" />
-              <Tab value="comissionamento" icon={<PercentRoundedIcon fontSize="small" />} iconPosition="start" label="Comissionamento" />
             </Tabs>
           </Stack>
 
@@ -253,7 +250,6 @@ function FunilInner() {
           <KanbanBoard filterConsultor={consultor} filterMotivo={motivo} search={search} />
         )}
         {tab === "dashboard" && <Dashboard />}
-        {tab === "comissionamento" && <Comissionamento />}
       </Box>
     </Box>
   );

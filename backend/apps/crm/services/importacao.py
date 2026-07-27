@@ -14,7 +14,7 @@ from io import BytesIO
 from django.db import transaction
 from openpyxl import Workbook, load_workbook
 
-from apps.crm.models import Cliente, EtapaFunil, Funil
+from apps.crm.models import Cliente, Etapa, Funil
 
 
 def _norm(texto) -> str:
@@ -111,12 +111,16 @@ def _parse_int(v):
         raise ValueError(f"número inválido: {v!r}")
 
 
-def _mapa_etapas():
-    m = {}
-    for value, label in EtapaFunil.choices:
-        m[_norm(value)] = value
-        m[_norm(label)] = value
-    return m
+def _mapa_etapas_do_funil(funil, _cache={}):
+    """{nome ou slug normalizado -> Etapa} do funil. As colunas são por funil,
+    então o mapa precisa ser resolvido depois de saber o funil da linha."""
+    if funil.id not in _cache:
+        m = {}
+        for e in Etapa.objects.filter(funil=funil):
+            m[_norm(e.slug)] = e
+            m[_norm(e.nome)] = e
+        _cache[funil.id] = m
+    return _cache[funil.id]
 
 
 def _mapa_funis():
@@ -164,7 +168,6 @@ def importar_clientes(arquivo, usuario=None) -> dict:
     if "nome" not in campos_por_indice.values():
         raise ValueError("A planilha precisa ter uma coluna 'Nome / Empresa'.")
 
-    etapas = _mapa_etapas()
     funis = _mapa_funis()
 
     criados = 0
@@ -175,6 +178,8 @@ def importar_clientes(arquivo, usuario=None) -> dict:
         if linha is None or all(c is None or str(c).strip() == "" for c in linha):
             continue  # linha em branco
         dados = {}
+        etapa_bruta = None      # resolvida só no fim: depende do funil da linha
+        coluna_etapa = "Etapa"
         erro_linha = None
         for i, campo in campos_por_indice.items():
             valor = linha[i] if i < len(linha) else None
@@ -187,10 +192,8 @@ def importar_clientes(arquivo, usuario=None) -> dict:
                         raise ValueError(f"funil '{valor}' não encontrado")
                     dados["funil"] = f
                 elif campo == "etapa":
-                    e = etapas.get(_norm(valor))
-                    if not e:
-                        raise ValueError(f"etapa '{valor}' inválida")
-                    dados["etapa"] = e
+                    etapa_bruta = str(valor).strip()
+                    coluna_etapa = cabecalho[i]
                 elif campo == "valor_contrato":
                     dados["valor_contrato"] = _parse_valor(valor)
                 elif campo in ("meses_contrato", "qtd_socios", "qtd_indicacoes"):
@@ -207,6 +210,29 @@ def importar_clientes(arquivo, usuario=None) -> dict:
         if not dados.get("nome"):
             erros.append({"linha": n, "erro": "nome vazio"})
             continue
+
+        # As colunas pertencem ao funil, então a etapa só pode ser resolvida
+        # depois de conhecer o funil da linha (a ordem das colunas é livre).
+        if etapa_bruta:
+            funil = dados.get("funil")
+            if funil is None:
+                erros.append({
+                    "linha": n,
+                    "erro": f"coluna '{coluna_etapa}': informe o funil para poder definir a etapa",
+                })
+                continue
+            etapa = _mapa_etapas_do_funil(funil).get(_norm(etapa_bruta))
+            if etapa is None:
+                disponiveis = ", ".join(
+                    Etapa.objects.filter(funil=funil).values_list("nome", flat=True)
+                ) or "(funil sem colunas)"
+                erros.append({
+                    "linha": n,
+                    "erro": f"coluna '{coluna_etapa}': etapa '{etapa_bruta}' não existe em "
+                            f"'{funil.nome}'. Disponíveis: {disponiveis}",
+                })
+                continue
+            dados["etapa"] = etapa
 
         cliente = Cliente(**dados)
         if usuario is not None and getattr(usuario, "is_authenticated", False):

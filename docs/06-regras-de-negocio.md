@@ -3,25 +3,49 @@
 ## Funis
 
 Sistema multi-funil. Os funis são registros em `crm_funil` (gerenciáveis pelo admin).
-Hoje: **Indicados APN**, **Base Elite**, **Resgate**. Um seletor global filtra por
-funil ou mostra "Todos". Por ora, os três compartilham as mesmas etapas.
+Hoje: **Indicados APN**, **Base Elite**, **Resgate**. Um seletor global escolhe **um**
+funil — não existe visão "todos", porque cada funil tem as próprias colunas e
+misturá-las num board só não significaria nada.
 
-## As 7 etapas do funil
+## Etapas (colunas) — por funil
 
-Ordem de progressão + cores (usadas no Kanban e no tema):
+Cada funil define as suas colunas, criáveis/renomeáveis/reordenáveis/excluíveis pela
+interface (ou pelo admin). Não há mais lista fixa global.
 
-| # | Etapa (slug) | Rótulo | Cor | Significado |
-|---|--------------|--------|-----|-------------|
-| 1 | `priorizado` | Priorizado | `#E4B744` | Selecionado para tentativa |
-| 2 | `contato_realizado` | Contato Realizado | `#EA932E` | Primeiro contato |
-| 3 | `conectado` | Conectado | `#E77123` | Conversa com decisor |
-| 4 | `diagnostico` | Diagnóstico | `#DF5B3A` | Entendimento da dor/oportunidade |
-| 5 | `proposta` | Proposta | `#B069D3` | Proposta enviada |
-| 6 | `reativado` | Reativado | `#31C47F` | **Ganho** — cliente fechou |
-| 7 | `perdido` | Perdido | `#666666` | Descartado (fora da progressão) |
+Cada etapa tem um **tipo**, e é ele que o Dashboard lê — assim os indicadores
+funcionam em qualquer funil, sem depender do nome da coluna:
 
-Etapa **vazia** = cliente na base mas fora do funil. O gráfico de conversão usa a
-progressão 1→6 (exclui Perdido).
+| Tipo | Papel |
+|------|-------|
+| `progressao` | passo normal da esteira |
+| `ganho` | fecha o funil com sucesso (KPI de conversão) |
+| `perda` | sai do funil sem sucesso |
+| `auxiliar` | fora da esteira (ex.: "Follow-up") |
+
+### Fluxo do Indicados APN (semeado pela migration 0007)
+
+| # | Slug | Rótulo | Cor | Tipo |
+|---|------|--------|-----|------|
+| 1 | `priorizado` | 🟡 Priorizado | `#E4B744` | progressao |
+| 2 | `primeiro_contato` | 🪪 Primeiro Contato | `#EA932E` | progressao |
+| 3 | `em_conversa` | 💬 Em Conversa | `#E77123` | progressao |
+| 4 | `interessado` | 🔥 Interessado | `#DF5B3A` | progressao |
+| 5 | `negociacao` | 🟠 Negociação | `#B069D3` | progressao |
+| 6 | `inscrito` | ✅ Inscrito | `#31C47F` | **ganho** |
+| 7 | `follow_up` | 🔁 Follow-up | `#3D7EC5` | auxiliar |
+| 8 | `encerrado` | ❌ Encerrado | `#666666` | perda |
+
+**Base Elite** e **Resgate** começam **sem colunas**, por decisão de produto — o
+fluxo de cada um será desenhado pela interface.
+
+Etapa **vazia** = cliente na base mas fora do funil. O gráfico de conversão usa as
+etapas de `progressao` + `ganho`, na ordem do board.
+
+### Renomear é seguro
+
+O `slug` de uma coluna é fixado na criação e **não muda** quando ela é renomeada —
+é o identificador que a API e a importação de planilha usam. Trocar o rótulo não
+quebra integração.
 
 ## Comissão
 
@@ -35,8 +59,9 @@ comissao_mensal = parcela_mensal * CRM_COMISSAO_RATE        (0,03 = 3%)
 ```
 
 - Calculado no **backend** (propriedades do modelo `Cliente`), exposto no serializer.
-- A aba **Comissionamento** agrupa por `quem_fara_contato` e soma parcela e comissão
-  dos clientes **Reativados**.
+- Os campos e os derivados continuam existindo na API; a **aba Comissionamento foi
+  removida da interface** em 2026-07-27 (estava sem dados: nenhum cliente tinha
+  `valor_contrato` preenchido).
 - A taxa (`CRM_COMISSAO_RATE`) e o padrão de meses (`CRM_MESES_CONTRATO_PADRAO`) são
   configuráveis por variável de ambiente (ver [07](07-configuracao.md)).
 

@@ -24,7 +24,6 @@ import {
   removerCliente,
 } from "@/features/funil/services/clientesService";
 import { parseValorBR } from "@/lib/format";
-import { STAGES, STAGE_META } from "@/lib/stages";
 
 const VAZIO = {
   funil: "",
@@ -70,7 +69,7 @@ export function ClienteFormDialog({ open, onClose, cliente = null }) {
         funil: cliente.funil != null ? String(cliente.funil) : "",
         nome: cliente.nome || "",
         quem_fara_contato: cliente.quem_fara_contato || "",
-        etapa: cliente.etapa || "none",
+        etapa: cliente.etapa != null ? String(cliente.etapa) : "none",
         telefone: cliente.telefone || "",
         email: cliente.email || "",
         cnpj: cliente.cnpj || "",
@@ -98,8 +97,15 @@ export function ClienteFormDialog({ open, onClose, cliente = null }) {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const funilSlug = funis.find((f) => String(f.id) === String(form.funil))?.slug;
+  const funilDoForm = funis.find((f) => String(f.id) === String(form.funil));
+  const funilSlug = funilDoForm?.slug;
   const isAPN = funilSlug === "indicados_apn";
+  // As colunas pertencem ao funil, então a lista muda junto com ele.
+  const etapasDoFunil = [...(funilDoForm?.etapas ?? [])].sort((a, b) => a.ordem - b.ordem);
+
+  /** Trocar de funil invalida a etapa escolhida: ela era de outro board. */
+  const setFunil = (e) =>
+    setForm((f) => ({ ...f, funil: e.target.value, etapa: "none" }));
 
   async function handleSubmit() {
     setErro("");
@@ -122,7 +128,7 @@ export function ClienteFormDialog({ open, onClose, cliente = null }) {
       funil: form.funil ? parseInt(form.funil, 10) : null,
       nome: form.nome.trim(),
       quem_fara_contato: form.quem_fara_contato,
-      etapa: form.etapa === "none" ? null : form.etapa,
+      etapa: form.etapa === "none" ? null : parseInt(form.etapa, 10),
       telefone: form.telefone,
       email: form.email,
       cnpj: form.cnpj,
@@ -187,7 +193,7 @@ export function ClienteFormDialog({ open, onClose, cliente = null }) {
           )}
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField select label="Funil" value={form.funil} onChange={set("funil")} fullWidth>
+              <TextField select label="Funil" value={form.funil} onChange={setFunil} fullWidth>
                 {funis.length === 0 && <MenuItem value="">—</MenuItem>}
                 {funis.map((f) => (
                   <MenuItem key={f.id} value={String(f.id)}>
@@ -206,11 +212,25 @@ export function ClienteFormDialog({ open, onClose, cliente = null }) {
               <TextField label="Consultor responsável" placeholder="Quem fará o contato" value={form.quem_fara_contato} onChange={set("quem_fara_contato")} fullWidth inputProps={{ maxLength: 120 }} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField select label="Etapa" value={form.etapa} onChange={set("etapa")} fullWidth>
+              <TextField
+                select
+                label="Etapa"
+                value={form.etapa}
+                onChange={set("etapa")}
+                fullWidth
+                disabled={etapasDoFunil.length === 0}
+                helperText={
+                  etapasDoFunil.length === 0 ? "Este funil ainda não tem colunas." : undefined
+                }
+              >
                 <MenuItem value="none">Sem etapa (fora do funil)</MenuItem>
-                {STAGES.map((s) => (
-                  <MenuItem key={s} value={s}>
-                    {STAGE_META[s].label}
+                {etapasDoFunil.map((e) => (
+                  <MenuItem key={e.id} value={String(e.id)}>
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: e.cor }} />
+                      {e.emoji ? `${e.emoji} ` : ""}
+                      {e.nome}
+                    </Box>
                   </MenuItem>
                 ))}
               </TextField>

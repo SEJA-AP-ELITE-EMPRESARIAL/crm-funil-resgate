@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from openpyxl import load_workbook
 
-from apps.crm.models import Cliente, EtapaFunil, Funil
+from apps.crm.models import Cliente, Etapa, Funil
 
 User = get_user_model()
 
@@ -79,8 +79,17 @@ class Command(BaseCommand):
             "Responsável", "Observações",
         ]}
 
-        etapas = {_norm(v): v for v, _ in EtapaFunil.choices}
-        etapas.update({_norm(l): v for v, l in EtapaFunil.choices})
+        # Colunas do funil de destino (por nome ou slug). O fallback é a
+        # primeira coluna do board — normalmente "Priorizado".
+        etapas = {}
+        for e in Etapa.objects.filter(funil=funil):
+            etapas[_norm(e.slug)] = e
+            etapas[_norm(e.nome)] = e
+        etapa_padrao = Etapa.objects.filter(funil=funil).order_by("ordem", "id").first()
+        if etapa_padrao is None:
+            raise CommandError(
+                f"O funil '{funil.nome}' não tem colunas. Crie as colunas antes de importar."
+            )
 
         criados, ignorados, preview = [], 0, []
         for row in rows[1:]:
@@ -103,7 +112,7 @@ class Command(BaseCommand):
                 ordem = int(prioridade[1:2])
 
             status_val = _v(row, idx, C["Status"])
-            etapa = etapas.get(_norm(status_val), EtapaFunil.PRIORIZADO)
+            etapa = etapas.get(_norm(status_val), etapa_padrao)
 
             qtd_txt = _v(row, idx, C["Qtd. de Indicações do Indicador"])
             try:

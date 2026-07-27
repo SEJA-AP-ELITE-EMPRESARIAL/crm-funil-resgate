@@ -2,12 +2,12 @@
 Serializers DRF do CRM.
 
 Convenção do ConectaAP: leitura e escrita separadas. O de leitura expõe campos
-derivados (rótulo da etapa, parcela e comissão calculadas); o de escrita valida
-apenas o shape — `criado_por` é injetado pela view.
+derivados (dados da etapa e do funil, parcela e comissão calculadas); o de
+escrita valida apenas o shape — `criado_por` é injetado pela view.
 """
 from rest_framework import serializers
 
-from apps.crm.models import Cliente
+from apps.crm.models import Cliente, Etapa
 
 # Campos editáveis via API (excluem metadados e derivados).
 _EDITAVEIS = [
@@ -27,7 +27,11 @@ _EDITAVEIS = [
 class ClienteSerializer(serializers.ModelSerializer):
     """Saída (read-only) — inclui campos derivados de negócio."""
 
-    etapa_display = serializers.CharField(source="get_etapa_display", read_only=True)
+    etapa_slug = serializers.CharField(source="etapa.slug", read_only=True, default=None)
+    etapa_display = serializers.CharField(source="etapa.nome", read_only=True, default=None)
+    etapa_emoji = serializers.CharField(source="etapa.emoji", read_only=True, default=None)
+    etapa_cor = serializers.CharField(source="etapa.cor", read_only=True, default=None)
+    etapa_tipo = serializers.CharField(source="etapa.tipo", read_only=True, default=None)
     funil_nome = serializers.CharField(source="funil.nome", read_only=True, default=None)
     funil_slug = serializers.CharField(source="funil.slug", read_only=True, default=None)
     funil_cor = serializers.CharField(source="funil.cor", read_only=True, default=None)
@@ -42,7 +46,8 @@ class ClienteSerializer(serializers.ModelSerializer):
         model = Cliente
         fields = [
             "id", *_EDITAVEIS,
-            "etapa_display", "funil_nome", "funil_slug", "funil_cor",
+            "etapa_slug", "etapa_display", "etapa_emoji", "etapa_cor", "etapa_tipo",
+            "funil_nome", "funil_slug", "funil_cor",
             "parcela_mensal", "comissao_mensal", "meses_efetivos",
             "criado_por", "criado_por_nome", "criado_em", "atualizado_em",
         ]
@@ -50,7 +55,14 @@ class ClienteSerializer(serializers.ModelSerializer):
 
 
 class ClienteWriteSerializer(serializers.ModelSerializer):
-    """Entrada (create/update)."""
+    """Entrada (create/update).
+
+    `etapa` aceita **o id da coluna ou o slug dela** — o slug é resolvido dentro
+    do funil do cliente, que é o que uma integração tem em mãos (ela conhece
+    `"em_conversa"`, não o id numérico). Enviar `null` tira o cliente do board.
+    """
+
+    etapa = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = Cliente
@@ -71,3 +83,32 @@ class ClienteWriteSerializer(serializers.ModelSerializer):
         if value is not None and value <= 0:
             raise serializers.ValidationError("Duração do contrato deve ser maior que zero.")
         return value
+
+    def validate(self, attrs):
+        if "etapa" in attrs:
+            funil = attrs.get("funil", getattr(self.instance, "funil", None))
+            attrs["etapa"] = self._resolver_etapa(attrs["etapa"], funil)
+        return attrs
+
+    @staticmethod
+    def _resolver_etapa(bruto, funil):
+        """id ou slug -> instância de Etapa, sempre dentro do funil do cliente."""
+        if bruto in (None, "", "null"):
+            return None
+        if funil is None:
+            raise serializers.ValidationError(
+                {"etapa": "Defina o funil do cliente antes de escolher a coluna."}
+            )
+
+        bruto = str(bruto).strip()
+        busca = {"pk": int(bruto)} if bruto.isdigit() else {"slug": bruto}
+        etapa = Etapa.objects.filter(funil=funil, **busca).first()
+        if etapa is None:
+            disponiveis = ", ".join(
+                Etapa.objects.filter(funil=funil).values_list("slug", flat=True)
+            ) or "(este funil ainda não tem colunas)"
+            raise serializers.ValidationError(
+                {"etapa": f"Coluna '{bruto}' não existe no funil '{funil.nome}'. "
+                          f"Disponíveis: {disponiveis}."}
+            )
+        return etapa

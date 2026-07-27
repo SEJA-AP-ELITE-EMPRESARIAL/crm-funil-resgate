@@ -16,7 +16,7 @@ src/
 ├── features/funil/services/
 │   └── clientesService.js   # camada de dados (chama a API)
 ├── lib/
-│   ├── stages.js            # STAGES, STAGE_META (rótulo, cor, descrição)
+│   ├── stages.js            # helpers das etapas (a lista vem da API)
 │   └── format.js            # fmtBRL, parseValorBR, num
 ├── components/
 │   ├── auth/PrivateRoute.jsx
@@ -26,8 +26,8 @@ src/
 │       ├── ClienteCard.jsx      # cartão (memoizado) + selo de prioridade
 │       ├── ClienteFormDialog.jsx# criar/editar/excluir (form adapta ao funil)
 │       ├── ImportarDialog.jsx   # importação de Excel
-│       ├── Dashboard.jsx        # KPIs, funil, rankings, motivos (Recharts)
-│       └── Comissionamento.jsx  # tabela de comissão por responsável
+│       ├── EtapaFormDialog.jsx  # criar/editar coluna do Kanban
+│       └── Dashboard.jsx        # KPIs, funil, rankings, motivos (Recharts)
 ├── pages/
 │   ├── Login.jsx
 │   └── Funil.jsx            # header + seletor de funil + abas + filtros
@@ -48,7 +48,7 @@ Sem Redux/React Query — **Context API** (padrão ConectaAP):
   Tokens no `localStorage`; escuta o evento `crm-token-expired` (disparado pelo
   interceptor do axios) para deslogar.
 - **`ClientesContext`** — carrega **clientes + funis + config** de uma vez e serve
-  Kanban, Dashboard e Comissionamento. Expõe:
+  Kanban e Dashboard. Expõe:
   - `clientes` (toda a base) e `clientesDoFunil` (filtrado pelo funil selecionado);
   - `funis`, `funilSel`, `setFunilSel` (seletor global);
   - `reload()`, `moverEtapa(id, etapa)` (arraste otimista com rollback);
@@ -77,7 +77,9 @@ APN / Base Elite / Resgate); botões "Importar" e "Novo cliente"; três abas:
 
 - **Kanban** — `KanbanBoard` + filtros (busca, consultor, motivo).
 - **Dashboard** — `Dashboard`.
-- **Comissionamento** — `Comissionamento`.
+
+O seletor de funil **não tem mais a opção "Todos"**: cada funil tem as próprias
+colunas, e a aba Comissionamento foi removida em 2026-07-27.
 
 ### Kanban
 `@dnd-kit`: colunas (`StageColumn`) por etapa, cartões (`ClienteCard`) arrastáveis.
@@ -99,9 +101,15 @@ conversão por etapa (Recharts), **distribuição por prioridade** (P1–P5, com
 da prioridade) e análise por motivo de distrato. Os tooltips dos gráficos usam texto
 branco.
 
-### Comissionamento
-Tabela por responsável: resgates, valor de contrato, parcela mensal e comissão
-mensal (soma dos derivados calculados pelo backend). A taxa exibida vem de `/config`.
+### Gestão de colunas
+
+O board é montado a partir das etapas do funil selecionado (`etapas` no contexto).
+Cada coluna tem um menu com **renomear/cor**, **mover para a esquerda/direita** e
+**excluir**; o botão **Nova coluna** fica ao fim do board. Excluir coluna com
+clientes é bloqueado pelo backend (409) e vira mensagem no snackbar.
+
+Funil sem colunas mostra um estado vazio convidando a criar a primeira — é o caso
+de Base Elite e Resgate.
 
 ## Tema (`theme/index.js`)
 

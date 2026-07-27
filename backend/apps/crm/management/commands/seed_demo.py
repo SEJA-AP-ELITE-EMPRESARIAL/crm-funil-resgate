@@ -3,15 +3,20 @@ Popula o CRM com um usuário demo e uma carteira de exemplo.
 
     python manage.py seed_demo
 
-Idempotente: usa get_or_create. Útil para subir o app e já ver o Kanban,
-Dashboard e Comissionamento com dados.
+Idempotente: usa get_or_create. Útil para subir o app e já ver o Kanban e o
+Dashboard com dados.
+
+As etapas pertencem a cada funil (ver models/etapa.py). Só o Indicados APN vem
+com colunas semeadas pela migration; Base Elite e Resgate começam vazios, por
+decisão de produto — os exemplos desses funis ficam sem etapa (fora do board)
+até alguém criar as colunas pela interface.
 """
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from apps.crm.models import Cliente, EtapaFunil, Funil
+from apps.crm.models import Cliente, Etapa, Funil
 
 User = get_user_model()
 
@@ -27,18 +32,18 @@ FUNIS = [
 ]
 
 CLIENTES = [
-    # nome, funil_slug, etapa, consultor, municipio, estado, motivo, valor, meses
-    ("Prefeitura de Araçatuba", "resgate", EtapaFunil.REATIVADO, "Ana Souza", "Araçatuba", "SP", "Preço", Decimal("48000"), 12),
-    ("Contabilidade Horizonte", "resgate", EtapaFunil.REATIVADO, "Bruno Lima", "Curitiba", "PR", "Sem uso", Decimal("24000"), 12),
-    ("Mercado São João", "resgate", EtapaFunil.PROPOSTA, "Ana Souza", "Bauru", "SP", "Preço", None, None),
-    ("Farmácia BemEstar", "resgate", EtapaFunil.PERDIDO, "Carla Dias", "Campinas", "SP", "Concorrente", None, None),
-    ("Restaurante Sabor&Cia", "resgate", EtapaFunil.REATIVADO, "Carla Dias", "Ribeirão Preto", "SP", "Sem uso", Decimal("18000"), 6),
-    ("Clínica VidaPlena", "base_elite", EtapaFunil.DIAGNOSTICO, "Carla Dias", "Londrina", "PR", "Atendimento", None, None),
-    ("Auto Peças Central", "base_elite", EtapaFunil.CONECTADO, "Bruno Lima", "Maringá", "PR", "Concorrente", None, None),
-    ("Construtora Alicerce", "base_elite", EtapaFunil.PRIORIZADO, "Ana Souza", "Osasco", "SP", "Preço", None, None),
-    ("Escola Aprender+", "indicados_apn", EtapaFunil.CONTATO_REALIZADO, "Carla Dias", "Sorocaba", "SP", "Indicação", None, None),
-    ("Transportadora RotaSul", "indicados_apn", EtapaFunil.PRIORIZADO, "Ana Souza", "Joinville", "SC", "Indicação", None, None),
-    ("Padaria Pão Quente", "indicados_apn", EtapaFunil.REATIVADO, "Bruno Lima", "Blumenau", "SC", "Indicação", Decimal("9600"), 12),
+    # nome, funil_slug, etapa_slug (do próprio funil), consultor, municipio, estado, motivo, valor, meses
+    ("Prefeitura de Araçatuba", "resgate", None, "Ana Souza", "Araçatuba", "SP", "Preço", Decimal("48000"), 12),
+    ("Contabilidade Horizonte", "resgate", None, "Bruno Lima", "Curitiba", "PR", "Sem uso", Decimal("24000"), 12),
+    ("Mercado São João", "resgate", None, "Ana Souza", "Bauru", "SP", "Preço", None, None),
+    ("Farmácia BemEstar", "resgate", None, "Carla Dias", "Campinas", "SP", "Concorrente", None, None),
+    ("Restaurante Sabor&Cia", "resgate", None, "Carla Dias", "Ribeirão Preto", "SP", "Sem uso", Decimal("18000"), 6),
+    ("Clínica VidaPlena", "base_elite", None, "Carla Dias", "Londrina", "PR", "Atendimento", None, None),
+    ("Auto Peças Central", "base_elite", None, "Bruno Lima", "Maringá", "PR", "Concorrente", None, None),
+    ("Construtora Alicerce", "base_elite", None, "Ana Souza", "Osasco", "SP", "Preço", None, None),
+    ("Escola Aprender+", "indicados_apn", "primeiro_contato", "Carla Dias", "Sorocaba", "SP", "Indicação", None, None),
+    ("Transportadora RotaSul", "indicados_apn", "priorizado", "Ana Souza", "Joinville", "SC", "Indicação", None, None),
+    ("Padaria Pão Quente", "indicados_apn", "inscrito", "Bruno Lima", "Blumenau", "SC", "Indicação", Decimal("9600"), 12),
 ]
 
 
@@ -85,13 +90,20 @@ class Command(BaseCommand):
             ))
             return
 
-        novos = 0
-        for i, (nome, funil_slug, etapa, consultor, mun, uf, motivo, valor, meses) in enumerate(CLIENTES):
+        novos, sem_coluna = 0, 0
+        for i, (nome, funil_slug, etapa_slug, consultor, mun, uf, motivo, valor, meses) in enumerate(CLIENTES):
+            funil = funis.get(funil_slug)
+            etapa = None
+            if etapa_slug and funil:
+                etapa = Etapa.objects.filter(funil=funil, slug=etapa_slug).first()
+                if etapa is None:
+                    sem_coluna += 1
+
             _, foi_criado = Cliente.objects.get_or_create(
                 nome=nome,
                 defaults={
-                    "funil": funis.get(funil_slug),
-                    "etapa": etapa or None,
+                    "funil": funil,
+                    "etapa": etapa,
                     "quem_fara_contato": consultor,
                     "municipio": mun,
                     "estado": uf,
@@ -103,4 +115,12 @@ class Command(BaseCommand):
                 },
             )
             novos += int(foi_criado)
+
         self.stdout.write(self.style.SUCCESS(f"{len(funis)} funis · {novos} cliente(s) de exemplo criados."))
+        if sem_coluna:
+            self.stdout.write(self.style.WARNING(
+                f"{sem_coluna} exemplo(s) ficaram sem etapa: a coluna indicada não existe no funil."
+            ))
+        self.stdout.write(
+            "Base Elite e Resgate começam sem colunas — crie-as pelo Kanban para usar esses funis."
+        )

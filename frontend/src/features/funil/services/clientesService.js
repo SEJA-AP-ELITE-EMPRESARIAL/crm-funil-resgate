@@ -36,6 +36,30 @@ export async function listarFunis() {
   return data.results ?? [];
 }
 
+/* === Colunas do Kanban (etapas). Pertencem a um funil. === */
+
+export async function criarEtapa(payload) {
+  const { data } = await api.post(`${BASE}/etapas/`, payload);
+  return data;
+}
+
+export async function atualizarEtapa(id, patch) {
+  const { data } = await api.patch(`${BASE}/etapas/${id}/`, patch);
+  return data;
+}
+
+export async function removerEtapa(id) {
+  await api.delete(`${BASE}/etapas/${id}/`);
+}
+
+export async function reordenarEtapas(funilId, idsEmOrdem) {
+  const { data } = await api.post(`${BASE}/etapas/reordenar/`, {
+    funil: funilId,
+    ordem: idsEmOrdem,
+  });
+  return data.results ?? [];
+}
+
 export async function importarClientes(file) {
   const fd = new FormData();
   fd.append("arquivo", file);

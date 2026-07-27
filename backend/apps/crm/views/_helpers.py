@@ -14,4 +14,4 @@ from apps.crm.models import Cliente
 
 def clientes_base():
     """QuerySet base — toda a carteira, visível para toda a equipe autenticada."""
-    return Cliente.objects.select_related("criado_por", "funil").all()
+    return Cliente.objects.select_related("criado_por", "funil", "etapa").all()

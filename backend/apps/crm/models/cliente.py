@@ -1,28 +1,19 @@
 """
-Modelo do cliente no funil de resgate (win-back).
+Modelo do cliente trabalhado nos funis.
 
 Réplica do MVP (Lovable/Supabase), com as correções acordadas:
-- `etapa` como TextChoices (slug + rótulo) em vez de texto livre;
 - `meses_contrato` parametriza a parcela mensal (fim do "valor / 12" fixo);
 - `criado_por` é apenas metadado/auditoria — a base é COMPARTILHADA pela equipe,
   então a visibilidade não é restrita por usuário (ver views/_helpers.py).
+
+`etapa` era um TextChoices global, igual para os três funis. Virou FK para
+`Etapa`, que pertence a um funil — cada funil tem as próprias colunas, criáveis
+pela interface (ver models/etapa.py).
 """
 from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-
-
-class EtapaFunil(models.TextChoices):
-    """As 7 etapas do funil de resgate, na ordem de progressão."""
-
-    PRIORIZADO = "priorizado", "Priorizado"
-    CONTATO_REALIZADO = "contato_realizado", "Contato Realizado"
-    CONECTADO = "conectado", "Conectado"
-    DIAGNOSTICO = "diagnostico", "Diagnóstico"
-    PROPOSTA = "proposta", "Proposta"
-    REATIVADO = "reativado", "Reativado"
-    PERDIDO = "perdido", "Perdido"
 
 
 class Cliente(models.Model):
@@ -77,13 +68,14 @@ class Cliente(models.Model):
     lt = models.CharField("LT", max_length=60, blank=True)
 
     # Funil
-    etapa = models.CharField(
-        max_length=30,
-        choices=EtapaFunil.choices,
+    etapa = models.ForeignKey(
+        "crm.Etapa",
+        on_delete=models.PROTECT,
+        related_name="clientes",
         null=True,
         blank=True,
         db_index=True,
-        help_text="Etapa atual no funil. Vazio = fora do funil (só na base).",
+        help_text="Coluna atual no Kanban. Vazio = fora do funil (só na base).",
     )
     ordem = models.IntegerField(default=0, help_text="Ordem dentro da coluna do Kanban.")
     notas = models.TextField(max_length=2000, blank=True)
@@ -119,7 +111,6 @@ class Cliente(models.Model):
         verbose_name_plural = "clientes"
         ordering = ("ordem", "nome")
         indexes = [
-            models.Index(fields=["etapa"]),
             models.Index(fields=["quem_fara_contato"]),
         ]
 

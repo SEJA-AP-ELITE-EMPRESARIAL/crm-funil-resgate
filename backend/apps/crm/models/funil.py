@@ -1,13 +1,13 @@
 """
 Funil de vendas/relacionamento.
 
-Hoje há 3 (Indicados APN, Base Elite, Resgate) e todos compartilham as mesmas
-etapas (EtapaFunil). O modelo é uma TABELA (gerenciável no admin) para permitir
-criar/renomear/desativar funis sem migration.
+Hoje há 3 (Indicados APN, Base Elite, Resgate). O modelo é uma TABELA
+(gerenciável no admin) para permitir criar/renomear/desativar funis sem migration.
 
-Evolução futura prevista: dar etapas próprias por funil. Quando isso for
-necessário, adicionar aqui um relacionamento de etapas (ex.: modelo EtapaCustom
-com FK para Funil) e passar a resolver as colunas do Kanban pelo funil.
+**Cada funil tem as próprias colunas** (`related_name="etapas"`, ver
+models/etapa.py) — o que era uma evolução prevista e foi feita em 2026-07-27.
+As colunas do Kanban se resolvem pelo funil selecionado; um funil pode
+legitimamente não ter nenhuma (é o estado inicial de Base Elite e Resgate).
 """
 from django.db import models
 

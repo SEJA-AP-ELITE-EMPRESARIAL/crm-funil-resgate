@@ -45,7 +45,7 @@ Colunas principais (ver a lista completa de campos em [02 — Backend](02-backen
 |--------|------|-------|
 | id | bigint PK | |
 | funil_id | bigint FK→crm_funil | `ON DELETE PROTECT`, nullable |
-| etapa | varchar(30) | choices (slug), nullable = fora do funil |
+| etapa_id | bigint FK→crm_etapa | `ON DELETE PROTECT`, nullable = fora do funil |
 | nome | varchar(200) | obrigatório |
 | valor_contrato | numeric(12,2) | nullable |
 | meses_contrato | smallint | nullable |
@@ -56,7 +56,23 @@ Colunas principais (ver a lista completa de campos em [02 — Backend](02-backen
 | criado_em / atualizado_em | timestamptz | auto |
 | … | | + campos de indicação, localização, comercial, operacional |
 
-Índices: `etapa`, `quem_fara_contato`, `funil_id`.
+Índices: `quem_fara_contato`, `funil_id`, `etapa_id` (índice da própria FK).
+
+### `crm_etapa`
+Coluna do Kanban — **pertence a um funil**. Substituiu o antigo enum global de
+etapas em 2026-07-27.
+
+| Coluna | Tipo | Notas |
+|--------|------|-------|
+| id | bigint PK | |
+| funil_id | bigint FK→crm_funil | `ON DELETE CASCADE` |
+| nome | varchar(60) | |
+| slug | varchar(60) | **único por funil** (constraint `etapa_slug_unica_por_funil`) |
+| emoji | varchar(8) | ícone da coluna |
+| cor | varchar(9) | hex |
+| ordem | smallint | posição no board |
+| tipo | varchar(12) | `progressao` · `ganho` · `perda` · `auxiliar` |
+| criado_em / atualizado_em | timestamptz | auto |
 
 ### Tabelas do Django (padrão)
 `auth_user`, `auth_group`, `auth_permission`, `django_migrations`,
@@ -66,9 +82,12 @@ Colunas principais (ver a lista completa de campos em [02 — Backend](02-backen
 
 ```
 crm_funil 1 ───< N crm_cliente >─── N 1 auth_user (criado_por)
+    │                   │
+    └──< N crm_etapa >──┘   (cliente.etapa_id, PROTECT)
 ```
 
-Um funil tem muitos clientes; um cliente pertence a um funil (ou nenhum) e referencia
+Um funil tem muitos clientes **e muitas colunas**; um cliente pertence a um funil (ou
+nenhum), fica em uma coluna **daquele** funil (ou nenhuma) e referencia
 o usuário que o criou (apenas metadado — não controla visibilidade; ver
 [02 — permissões](02-backend.md)).
 
@@ -81,6 +100,9 @@ o usuário que o criou (apenas metadado — não controla visibilidade; ver
 | `0003_seed_funis` | cria os 3 funis e vincula clientes existentes |
 | `0004_...` | campos de indicação (indicador, faixa, prioridade, qtd) |
 | `0005_apikey` | cria `crm_apikey` (chaves de integração externa) |
+| `0006_etapa` | cria `crm_etapa` + campo temporário no cliente |
+| `0007_seed_etapas_por_funil` | semeia as 8 colunas do Indicados APN e migra os clientes |
+| `0008_cliente_etapa_fk` | `Cliente.etapa` deixa de ser texto e vira FK |
 
 Aplicar: `python manage.py migrate`. Em produção, aplique **antes** de trocar o
 container que serve tráfego — o procedimento está em [09](09-deploy-operacao.md).

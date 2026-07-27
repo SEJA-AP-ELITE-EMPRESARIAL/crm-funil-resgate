@@ -10,6 +10,6 @@ from apps.crm.serializers import FunilSerializer
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, HasApiScope])
 def funil_list(request):
-    """Lista os funis ativos (para o seletor global)."""
-    funis = Funil.objects.filter(ativo=True)
+    """Lista os funis ativos **com as suas colunas** (para o seletor e o Kanban)."""
+    funis = Funil.objects.filter(ativo=True).prefetch_related("etapas__clientes")
     return Response({"results": FunilSerializer(funis, many=True).data})

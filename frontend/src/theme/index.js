@@ -5,7 +5,6 @@
  */
 import { createTheme, alpha } from "@mui/material/styles";
 
-import { STAGE_COLORS } from "@/lib/stages";
 
 const primaryMain = "#C7A444";
 const secondaryMain = "#4A4A49";
@@ -42,7 +41,8 @@ export const createAppTheme = (mode = "dark") => {
       info: { main: isDark ? "#17A2B8" : "#0D8FA8" },
       // Extensões custom
       surface: { base: backgroundPaper, elevated: surfaceElevated, muted: textMuted, borderLight },
-      stages: STAGE_COLORS,
+      // As cores das etapas passaram a vir do banco (cada funil tem as suas),
+      // então não há mais um mapa fixo aqui — cada coluna usa `etapa.cor`.
     },
     shape: { borderRadius: 8 },
     spacing: 8,

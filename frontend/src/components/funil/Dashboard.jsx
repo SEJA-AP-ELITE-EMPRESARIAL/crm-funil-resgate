@@ -25,7 +25,7 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 
 
 import { useClientesData } from "@/contexts/ClientesContext";
 import { fmtBRL, num } from "@/lib/format";
-import { PROGRESS_STAGES, STAGE_META } from "@/lib/stages";
+import { etapasDaEsteira } from "@/lib/stages";
 
 // Cores da prioridade (P1 = mais quente → P5 = mais fria).
 const PRIO_COLORS = { P1: "#DC3545", P2: "#EA932E", P3: "#E4B744", P4: "#3D7EC5", P5: "#8A8A8A" };
@@ -84,12 +84,24 @@ function PanelCard({ title, subtitle, icon: Icon, children }) {
 
 export function Dashboard() {
   const theme = useTheme();
-  const { clientesDoFunil: clientes } = useClientesData();
+  const { clientesDoFunil: clientes, etapas } = useClientesData();
+
+  // O funil deixou de ter etapas fixas: a esteira e as colunas de ganho/perda
+  // saem do TIPO de cada coluna do funil selecionado.
+  const esteira = useMemo(() => etapasDaEsteira(etapas), [etapas]);
+  const idsGanho = useMemo(
+    () => new Set(etapas.filter((e) => e.tipo === "ganho").map((e) => e.id)),
+    [etapas],
+  );
+  const idsPerda = useMemo(
+    () => new Set(etapas.filter((e) => e.tipo === "perda").map((e) => e.id)),
+    [etapas],
+  );
 
   const stats = useMemo(() => {
     const inFunnel = clientes.filter((c) => !!c.etapa);
-    const reativados = inFunnel.filter((c) => c.etapa === "reativado").length;
-    const perdidos = inFunnel.filter((c) => c.etapa === "perdido").length;
+    const reativados = inFunnel.filter((c) => idsGanho.has(c.etapa)).length;
+    const perdidos = inFunnel.filter((c) => idsPerda.has(c.etapa)).length;
     const total = inFunnel.length;
     return {
       base: clientes.length,
@@ -98,18 +110,18 @@ export function Dashboard() {
       ativos: total - reativados - perdidos,
       taxa: total ? reativados / total : 0,
     };
-  }, [clientes]);
+  }, [clientes, idsGanho, idsPerda]);
 
   const funnelData = useMemo(() => {
-    const inFunnel = clientes.filter((c) => !!c.etapa);
-    return PROGRESS_STAGES.map((s, i) => {
-      const qty = inFunnel.filter((c) => {
-        if (!c.etapa || c.etapa === "perdido") return false;
-        return PROGRESS_STAGES.indexOf(c.etapa) >= i;
-      }).length;
-      return { stage: STAGE_META[s].label, qty, color: STAGE_META[s].color };
-    });
-  }, [clientes]);
+    const posicao = new Map(esteira.map((e, i) => [e.id, i]));
+    const inFunnel = clientes.filter((c) => !!c.etapa && posicao.has(c.etapa));
+    // Funil acumulado: quem está na etapa i também passou por todas as anteriores.
+    return esteira.map((etapa, i) => ({
+      stage: etapa.nome,
+      qty: inFunnel.filter((c) => posicao.get(c.etapa) >= i).length,
+      color: etapa.cor,
+    }));
+  }, [clientes, esteira]);
 
   const consultores = useMemo(() => {
     const map = new Map();
@@ -119,14 +131,14 @@ export function Dashboard() {
         const k = c.quem_fara_contato || "Sem Consultor";
         const cur = map.get(k) ?? { prio: 0, reat: 0, valor: 0 };
         cur.prio++;
-        if (c.etapa === "reativado") {
+        if (idsGanho.has(c.etapa)) {
           cur.reat++;
           cur.valor += num(c.valor_contrato);
         }
         map.set(k, cur);
       });
     return [...map.entries()].map(([nome, s]) => ({ nome, ...s, taxa: s.prio ? s.reat / s.prio : 0 }));
-  }, [clientes]);
+  }, [clientes, idsGanho]);
 
   const valorTotal = useMemo(() => consultores.reduce((a, c) => a + c.valor, 0), [consultores]);
 
@@ -148,25 +160,33 @@ export function Dashboard() {
       const cur = map.get(k) ?? { base: 0, prio: 0, reat: 0 };
       cur.base++;
       if (c.etapa) cur.prio++;
-      if (c.etapa === "reativado") cur.reat++;
+      if (idsGanho.has(c.etapa)) cur.reat++;
       map.set(k, cur);
     });
     return [...map.entries()]
       .map(([motivo, s]) => ({ motivo, ...s, taxa: s.prio ? s.reat / s.prio : 0 }))
       .sort((a, b) => b.base - a.base);
-  }, [clientes]);
+  }, [clientes, idsGanho]);
 
   const maxMotivo = Math.max(1, ...motivos.map((m) => m.base));
+
+  // Cores dos KPIs saem das próprias colunas do funil (a primeira da esteira,
+  // uma do meio e a de ganho), com fallback para o dourado do tema.
+  const corPrimeira = esteira[0]?.cor ?? theme.palette.primary.main;
+  const corMeio = esteira[Math.floor(esteira.length / 2)]?.cor ?? theme.palette.primary.main;
+  const corGanho =
+    etapas.find((e) => e.tipo === "ganho")?.cor ?? theme.palette.success?.main ?? "#31C47F";
+  const rotuloGanho = etapas.find((e) => e.tipo === "ganho")?.nome ?? "Ganhos";
 
   return (
     <Stack spacing={3}>
       <Grid container spacing={2}>
         {[
           { label: "Base Total", value: String(stats.base), icon: ApartmentRoundedIcon, color: theme.palette.primary.main },
-          { label: "No Funil", value: String(stats.total), icon: TrackChangesRoundedIcon, color: STAGE_META.priorizado.color },
-          { label: "Em Andamento", value: String(stats.ativos), icon: BoltRoundedIcon, color: STAGE_META.conectado.color },
-          { label: "Reativados", value: String(stats.reativados), icon: EmojiEventsRoundedIcon, color: STAGE_META.reativado.color },
-          { label: "Taxa Reativação", value: `${(stats.taxa * 100).toFixed(1)}%`, icon: TrendingUpRoundedIcon, color: theme.palette.primary.main },
+          { label: "No Funil", value: String(stats.total), icon: TrackChangesRoundedIcon, color: corPrimeira },
+          { label: "Em Andamento", value: String(stats.ativos), icon: BoltRoundedIcon, color: corMeio },
+          { label: rotuloGanho, value: String(stats.reativados), icon: EmojiEventsRoundedIcon, color: corGanho },
+          { label: "Taxa de Conversão", value: `${(stats.taxa * 100).toFixed(1)}%`, icon: TrendingUpRoundedIcon, color: theme.palette.primary.main },
           { label: "Valor Recuperado", value: fmtBRL(valorTotal), icon: PaidRoundedIcon, color: theme.palette.primary.main },
         ].map((k) => (
           <Grid size={{ xs: 12, sm: 6, lg: 2 }} key={k.label}>

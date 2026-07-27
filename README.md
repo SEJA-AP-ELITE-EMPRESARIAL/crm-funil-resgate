@@ -3,7 +3,7 @@
 [![CI](https://github.com/SEJA-AP-ELITE-EMPRESARIAL/crm-funil-resgate/actions/workflows/ci.yml/badge.svg)](https://github.com/SEJA-AP-ELITE-EMPRESARIAL/crm-funil-resgate/actions/workflows/ci.yml)
 
 CRM para reativação de clientes cancelados: priorização → contato → diagnóstico →
-proposta → **reativação**, com Kanban, Dashboard e Comissionamento.
+proposta → **reativação**, com Kanban (colunas configuráveis por funil) e Dashboard.
 
 Réplica do MVP feito no Lovable (React + Supabase), **reconstruída na stack do
 ConectaAP** (React + Vite + MUI no front, Django + DRF no back) e com as
@@ -23,7 +23,7 @@ correções de negócio aplicadas.
 |---|---|---|
 | 1 | **RLS por usuário** — cada consultor só via o que ele mesmo criou; board vazio para os demais | **Base compartilhada pela equipe** — todo autenticado enxerga/trabalha a base; `criado_por` vira só metadado ([`views/_helpers.py`](backend/apps/crm/views/_helpers.py)) |
 | 2 | Comissão fixa em `valor / 12` | Campo **`meses_contrato`** parametriza a parcela (`valor ÷ meses`); taxa configurável via `CRM_COMISSAO_RATE` |
-| 3 | `etapa` como texto livre | `EtapaFunil` (**TextChoices**) — slug + rótulo |
+| 3 | `etapa` como texto livre | `Etapa` por funil — slug estável, cor, ícone e tipo |
 | 4 | Tipos desatualizados (`as any`) | Serializers DRF com campos derivados (`parcela_mensal`, `comissao_mensal`) |
 | 5 | `.env` fora do `.gitignore` | `.gitignore` cobre `.env`; só `.env.example` versionado |
 
@@ -71,23 +71,23 @@ crm-funil-resgate/
 ├── backend/                     # Django + DRF
 │   ├── config/                  # settings, urls (JWT no raiz), wsgi/asgi
 │   └── apps/crm/                # app do CRM (padrão ConectaAP)
-│       ├── models/cliente.py    # Cliente + EtapaFunil + regras (parcela/comissão)
+│       ├── models/              # Cliente, Etapa (coluna por funil), Funil, ApiKey
 │       ├── serializers/         # leitura (derivados) + escrita
 │       ├── services/            # regra de negócio (transações)
 │       ├── views/               # function-based (@api_view), base compartilhada
 │       ├── urls.py  admin.py    # rotas + admin com colunas coloridas
 │       ├── management/commands/seed_demo.py
-│       └── tests/test_api.py    # auth, base compartilhada, comissão
+│       └── tests/               # auth, base compartilhada, comissão, etapas, API keys
 └── frontend/                    # React + Vite + MUI
     └── src/
         ├── theme/               # tema dourado (dark-first) — cores das etapas
         ├── services/api.js      # axios + interceptors JWT (+ refresh)
         ├── contexts/            # AuthContext + ClientesContext (base compartilhada)
         ├── features/funil/services/  # camada de dados (clientesService)
-        ├── lib/stages.js        # 7 etapas (fonte única) + cores
+        ├── lib/stages.js        # helpers das etapas (a lista vem da API)
         ├── pages/               # Login, Funil (header + tabs)
         └── components/funil/    # KanbanBoard, StageColumn, ClienteCard,
-                                 # ClienteFormDialog, Dashboard, Comissionamento
+                                 # ClienteFormDialog, EtapaFormDialog, Dashboard
 ```
 
 ## API (resumo)
@@ -97,7 +97,11 @@ crm-funil-resgate/
 | POST | `/api/token/` | Login (e-mail **ou** username) → `{access, refresh}` |
 | POST | `/api/token/refresh/` | Renova o access token |
 | GET | `/api/crm/me/` | Usuário logado |
-| GET | `/api/crm/config/` | Taxa de comissão, meses padrão, etapas |
+| GET | `/api/crm/config/` | Taxa de comissão e meses padrão |
+| GET | `/api/crm/funis/` | Funis ativos, **com as colunas de cada um** |
+| GET/POST | `/api/crm/etapas/` | Colunas do Kanban (por funil) / cria |
+| PATCH/DELETE | `/api/crm/etapas/{id}/` | Renomeia, recolore / remove (409 se tiver clientes) |
+| POST | `/api/crm/etapas/reordenar/` | Aplica a nova ordem das colunas |
 | GET/POST | `/api/crm/clientes/` | Lista (base compartilhada) / cria |
 | GET/PATCH/DELETE | `/api/crm/clientes/{id}/` | Detalha / atualiza (ex.: mover etapa) / remove |
 
@@ -121,7 +125,7 @@ e aplicações) em [`docs/11-api-guia-completo.md`](docs/11-api-guia-completo.md
 ## Testes
 
 ```bash
-cd backend && python manage.py test apps.crm     # 29 testes
+cd backend && python manage.py test apps.crm     # 51 testes
 cd frontend && npm run build                       # valida a compilação
 ```
 

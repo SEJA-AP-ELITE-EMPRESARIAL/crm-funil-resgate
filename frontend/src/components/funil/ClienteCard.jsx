@@ -30,7 +30,9 @@ function ClienteCardBase({ cliente, overlay = false, onEdit }) {
     opacity: isDragging ? 0.4 : 1,
   };
 
-  const isReativado = cliente.etapa === "reativado";
+  // O nome da coluna de ganho muda por funil ("Inscrito", "Reativado"...),
+  // então o destaque do cartão segue o TIPO da etapa, não o nome.
+  const isReativado = cliente.etapa_tipo === "ganho";
   const valor = num(cliente.valor_contrato);
   const mostrarValores = isReativado && valor > 0;
   const parcela = num(cliente.parcela_mensal);

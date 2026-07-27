@@ -43,8 +43,9 @@ outros sistemas (ConectaAP), planilhas, BI e scripts internos.
 | Atualizar qualquer campo (valor fechado, responsável, notas) | `PATCH /api/crm/clientes/{id}/` | escrita |
 | Remover um registro | `DELETE /api/crm/clientes/{id}/` | escrita |
 | Importar uma planilha inteira | `POST /api/crm/clientes/importar/` | escrita |
-| Descobrir os funis existentes | `GET /api/crm/funis/` | leitura |
-| Descobrir etapas e taxa de comissão | `GET /api/crm/config/` | público |
+| Descobrir os funis **e suas colunas** | `GET /api/crm/funis/` | leitura |
+| Gerenciar colunas do Kanban | `GET/POST/PATCH/DELETE /api/crm/etapas/` | leitura / escrita |
+| Descobrir a taxa de comissão | `GET /api/crm/config/` | público |
 | Conferir se a credencial funciona | `GET /api/crm/me/` | leitura |
 
 O que **não** existe hoje (ver [limitações](#16-limitações-conhecidas)): webhooks,
@@ -54,19 +55,23 @@ busca textual, filtro por data, endpoints agregados de dashboard e OpenAPI/Swagg
 
 ```
 Funil (Indicados APN | Base Elite | Resgate)
-  └── Cliente  ──  etapa (7 valores) ── ordem (posição na coluna do Kanban)
+  ├── Etapa (coluna do Kanban) — cada funil tem as SUAS
+  └── Cliente  ──  etapa (FK) ── ordem (posição na coluna)
                 └─ contrato: valor_contrato + meses_contrato
                    └─ derivados: parcela_mensal, comissao_mensal
 ```
 
-Três fatos que mudam como você integra:
+Quatro fatos que mudam como você integra:
 
-1. **A base é compartilhada.** Não há isolamento por usuário: qualquer credencial
+1. **As etapas pertencem ao funil.** Não existe lista global: `"inscrito"` é uma
+   coluna do Indicados APN e pode não existir em outro funil. Um funil pode ter
+   **zero** colunas.
+2. **A base é compartilhada.** Não há isolamento por usuário: qualquer credencial
    autenticada enxerga e altera a carteira inteira. `criado_por` é só auditoria.
-2. **`etapa` pode ser nula.** Cliente sem etapa está "na base", fora do Kanban.
+3. **`etapa` pode ser nula.** Cliente sem etapa está "na base", fora do Kanban.
    Útil para carregar uma carteira sem jogá-la no funil.
-3. **`funil` pode ser nulo.** Cliente sem funil não aparece em nenhum filtro por
-   funil — evite criar assim via integração; sempre informe `funil`.
+4. **`funil` pode ser nulo.** Cliente sem funil não aparece em nenhum filtro por
+   funil, e **não pode receber etapa** — sempre informe `funil`.
 
 ## 3. Escolher a credencial: JWT ou chave de API
 
@@ -183,35 +188,50 @@ Devolve o usuário autenticado. Com chave de API, inclui o objeto `api_key`
 
 ### 6.5 `GET /api/crm/config/` — configuração (público)
 
-Não exige autenticação. Fonte da verdade para rotular a UI e validar entradas:
+Não exige autenticação. Só regra de negócio global:
 
 ```json
-{ "comissao_rate": 0.03,
-  "meses_contrato_padrao": 12,
-  "etapas": [ { "value": "priorizado", "label": "Priorizado" },
-              { "value": "contato_realizado", "label": "Contato Realizado" },
-              { "value": "conectado", "label": "Conectado" },
-              { "value": "diagnostico", "label": "Diagnóstico" },
-              { "value": "proposta", "label": "Proposta" },
-              { "value": "reativado", "label": "Reativado" },
-              { "value": "perdido", "label": "Perdido" } ] }
+{ "comissao_rate": 0.03, "meses_contrato_padrao": 12 }
 ```
 
-> Leia as etapas daqui em vez de fixá-las no código da integração — se o CRM
-> ganhar etapas novas, a automação acompanha sozinha.
+> **Mudou em 27/07/2026:** este endpoint devolvia uma lista global de `etapas`. As
+> etapas passaram a pertencer a cada funil — busque-as em `/api/crm/funis/`
+> (embutidas) ou em `/api/crm/etapas/?funil=<id|slug>`.
 
-### 6.6 `GET /api/crm/funis/` — funis ativos
+### 6.6 `GET /api/crm/funis/` — funis ativos **com as colunas**
 
 ```json
 { "results": [
   { "id": 1, "nome": "Indicados APN", "slug": "indicados_apn",
-    "cor": "#3D7EC5", "descricao": "...", "ativo": true, "ordem": 1 },
-  { "id": 2, "nome": "Base Elite", "slug": "base_elite", "...": "..." },
-  { "id": 3, "nome": "Resgate", "slug": "resgate", "...": "..." } ] }
+    "cor": "#3D7EC5", "ativo": true, "ordem": 1,
+    "etapas": [
+      { "id": 1, "funil": 1, "nome": "Priorizado", "slug": "priorizado",
+        "emoji": "🟡", "cor": "#E4B744", "ordem": 0, "tipo": "progressao",
+        "rotulo": "🟡 Priorizado", "total_clientes": 210 } ] },
+  { "id": 3, "nome": "Resgate", "slug": "resgate", "etapas": [] } ] }
 ```
 
-Só funis **ativos**. Guarde o `id` ou use o `slug` — ambos servem no filtro e o
-`slug` é mais estável para escrever no código.
+Só funis **ativos**. **É a chamada que resolve as colunas** — leia daqui em vez de
+fixar nomes de etapa no código.
+
+### 6.6.1 Colunas do Kanban — `/api/crm/etapas/`
+
+| Método | Rota | Nota |
+|---|---|---|
+| GET | `/api/crm/etapas/?funil=<id\|slug>` | lista as colunas do funil |
+| POST | `/api/crm/etapas/` | cria; exige `funil` e `nome`. `slug` e `ordem` são derivados |
+| PATCH | `/api/crm/etapas/{id}/` | renomeia, recolore, troca o tipo — **o slug não muda** |
+| DELETE | `/api/crm/etapas/{id}/` | `204` se vazia; **`409`** se tiver clientes |
+| POST | `/api/crm/etapas/reordenar/` | `{"funil": 1, "ordem": [3, 1, 2]}` |
+
+Criar uma coluna:
+
+```json
+{ "funil": 3, "nome": "Em Negociação", "emoji": "🤝",
+  "cor": "#B069D3", "tipo": "progressao" }
+```
+
+`400` se já existir coluna com esse nome no mesmo funil.
 
 ### 6.7 `GET /api/crm/clientes/` — listar
 
@@ -280,7 +300,7 @@ curl -X PATCH https://conecta-crm.sejaap.com.br/api/crm/clientes/42/ \
 # registrar a reativação com o contrato fechado
 curl -X PATCH https://conecta-crm.sejaap.com.br/api/crm/clientes/42/ \
   -H "Authorization: Api-Key $CRM_KEY" -H "Content-Type: application/json" \
-  -d '{"etapa": "reativado", "valor_contrato": "24000.00", "meses_contrato": 12}'
+  -d '{"etapa": "inscrito", "valor_contrato": "24000.00", "meses_contrato": 12}'
 ```
 
 `PUT` também é aceito, mas exige o objeto completo (inclusive `nome`) e **apaga**
@@ -395,8 +415,10 @@ planilha programaticamente com as colunas certas.
 |-------|------|---|-----------|
 | `funil` | int (id) \| null | E | FK; envie o **id**. `400` se o id não existir |
 | `funil_nome` / `funil_slug` / `funil_cor` | string \| null | L | Derivados do funil |
-| `etapa` | enum \| null | E | Um dos 7 slugs; `null` = fora do funil |
-| `etapa_display` | string | L | Rótulo legível ("Contato Realizado") |
+| `etapa` | int (id) \| null | E | Leitura: id da coluna. Escrita: **id ou slug**, resolvido no funil do cliente |
+| `etapa_slug` | string \| null | L | Slug estável da coluna |
+| `etapa_display` | string \| null | L | Nome da coluna ("Em Conversa") |
+| `etapa_emoji` / `etapa_cor` / `etapa_tipo` | string \| null | L | Derivados da coluna |
 | `ordem` | int | E | Posição na coluna do Kanban; default 0 |
 | `notas` | text(2000) | E | |
 
@@ -418,19 +440,34 @@ planilha programaticamente com as colunas certas.
 
 ## 8. Vocabulário controlado
 
-### Etapas (`etapa`) — na ordem do funil
-| Slug | Rótulo | Significado |
-|------|--------|-------------|
-| `priorizado` | Priorizado | Entrou na fila de resgate |
-| `contato_realizado` | Contato Realizado | Tentativa feita, sem resposta ainda |
-| `conectado` | Conectado | Conversa aconteceu |
-| `diagnostico` | Diagnóstico | Levantamento da necessidade |
-| `proposta` | Proposta | Proposta enviada |
-| `reativado` | Reativado | **Ganho** — preencha `valor_contrato` e `meses_contrato` |
-| `perdido` | Perdido | **Perda** |
-| `null` | — | Na base, fora do Kanban |
+### Etapas — **por funil**, não globais
 
-Enviar um slug fora dessa lista devolve **400**.
+Não há lista fixa: consulte `/api/crm/funis/`. O que é estável é o **tipo** de cada
+coluna, e é por ele que uma integração deve raciocinar:
+
+| Tipo | Significado |
+|------|-------------|
+| `progressao` | passo normal da esteira |
+| `ganho` | fecha o funil com sucesso |
+| `perda` | saiu sem sucesso |
+| `auxiliar` | fora da esteira (ex.: "Follow-up") |
+
+Fluxo atual do **Indicados APN** (o único funil com colunas hoje):
+
+| Slug | Rótulo | Tipo |
+|------|--------|------|
+| `priorizado` | 🟡 Priorizado | progressao |
+| `primeiro_contato` | 🪪 Primeiro Contato | progressao |
+| `em_conversa` | 💬 Em Conversa | progressao |
+| `interessado` | 🔥 Interessado | progressao |
+| `negociacao` | 🟠 Negociação | progressao |
+| `inscrito` | ✅ Inscrito | **ganho** |
+| `follow_up` | 🔁 Follow-up | auxiliar |
+| `encerrado` | ❌ Encerrado | perda |
+| `null` | — | na base, fora do Kanban |
+
+**Base Elite** e **Resgate** começam sem colunas. Enviar um slug que não existe no
+funil do cliente devolve **400**, com a lista dos disponíveis na mensagem.
 
 ### Funis (seed inicial)
 | id | slug | nome |
@@ -478,6 +515,7 @@ escrita alcança a carteira inteira. Se a integração só precisa ler, use `lei
 | `401` | Credencial ausente ou inválida | Ver mensagens abaixo |
 | `403` | Autenticado, mas sem permissão | Chave de leitura tentando escrever |
 | `404` | Não existe | `id` errado ou registro já removido |
+| `409` | Conflito | Excluir coluna que ainda tem clientes — mova os cartões antes |
 | `429` | Cota estourada | Respeite o header `Retry-After` (segundos) |
 | `500` | Erro no servidor | Verifique os logs do backend; abra chamado |
 
@@ -620,9 +658,11 @@ class ConectaCRM:
 
 if __name__ == "__main__":
     crm = ConectaCRM(os.environ["CRM_KEY"])
-    reativados = [c for c in crm.clientes(funil="resgate") if c["etapa"] == "reativado"]
-    total = sum(float(c["comissao_mensal"]) for c in reativados)
-    print(f"{len(reativados)} reativados · comissão recorrente R$ {total:,.2f}")
+    # "ganho" é o tipo da coluna que fecha o funil — o nome muda de funil para
+    # funil ("Inscrito", "Reativado"...), então filtramos pelo tipo.
+    ganhos = [c for c in crm.clientes(funil="indicados_apn") if c["etapa_tipo"] == "ganho"]
+    total = sum(float(c["comissao_mensal"]) for c in ganhos)
+    print(f"{len(ganhos)} ganhos · comissão recorrente R$ {total:,.2f}")
 ```
 
 ### 12.3 Node.js — criar lead a partir de um formulário
@@ -741,7 +781,7 @@ Baixe o modelo em `GET /api/crm/clientes/modelo-importacao/` para acertar as col
 |-----------|-------------|
 | **Lead do site cai direto no funil** | Formulário → webhook do seu site → `POST /clientes/` com `funil` e `etapa: "priorizado"` |
 | **WhatsApp/n8n move o card** | Resposta do cliente dispara `PATCH {"etapa": "conectado"}` — o Kanban atualiza sozinho |
-| **Relatório de comissionamento** | Varre `?funil=<x>`, filtra `etapa == "reativado"`, soma `comissao_mensal` (já calculado pela API) |
+| **Relatório de comissionamento** | Varre `?funil=<x>`, filtra `etapa_tipo == "ganho"`, soma `comissao_mensal` (já calculado pela API) |
 | **BI executivo** | Power BI puxando a base a cada hora; agregue por `etapa_display`, `quem_fara_contato`, `motivo_distrato` |
 | **Alerta de estagnação** | Diariamente, liste tudo e aponte quem está há N dias no mesmo `atualizado_em` sem mudar de etapa → notifica o consultor |
 | **Higienização em massa** | Liste, detecte duplicidade por `cnpj`/`email` no seu lado, consolide com `PATCH` e remova o excedente com `DELETE` |
@@ -798,7 +838,7 @@ Deliberadas, com o caminho de evolução:
 | **Sem webhooks** | integração só por polling | Emitir evento em `ClienteService.atualizar` → POST para URLs cadastradas |
 | **Sem OpenAPI/Swagger** | nenhum client gerado automaticamente | `drf-spectacular` + `/api/schema/` |
 | **Sem filtro por data ou busca textual** | varre tudo para achar o que mudou | `django-filter` com `atualizado_em__gte`, `search` |
-| **Sem endpoints agregados** | dashboard/comissionamento são calculados no consumidor | `/api/crm/metricas/`, `/api/crm/comissionamento/` |
+| **Sem endpoints agregados** | métricas são calculadas no consumidor | `/api/crm/metricas/` |
 | **Rate limit aproximado** | limite efetivo ≈ 3× o configurado (3 workers, cache local) | Configurar Redis em `CACHES` |
 | **Sem escopos por recurso** | escrita alcança tudo | Escopos granulares no modelo `ApiKey` |
 | **Sem histórico/auditoria** | não há como saber quem moveu o card | `django-simple-history` ou tabela de eventos |
