@@ -19,6 +19,7 @@ VPS do Conecta.
 | 08 | [Desenvolvimento](08-desenvolvimento.md) | Setup local, rodar, testar |
 | 09 | [Deploy e operação](09-deploy-operacao.md) | VPS, Docker, nginx, CI, updates, troubleshooting |
 | 10 | [Integração externa](10-integracao-externa.md) | Chaves de API, escopos, limites, paginação |
+| 11 | [Guia completo da API](11-api-guia-completo.md) | **Manual de integração**: dicionário de campos, erros reais, receitas (n8n, Python, Sheets, Power BI), aplicações |
 
 ## Links rápidos
 

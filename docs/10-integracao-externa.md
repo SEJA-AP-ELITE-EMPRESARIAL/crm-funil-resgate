@@ -2,6 +2,10 @@
 
 Como um sistema de fora (n8n, ConectaAP, scripts, dashboards) consome o Conecta_CRM.
 
+> Este documento cobre **emissão e gestão das chaves**. Para o manual de uso da API
+> — dicionário de campos, erros, receitas prontas e aplicações — veja
+> [11 — Guia completo da API](11-api-guia-completo.md).
+
 O JWT do front expira em 4h e depende de refresh — inviável para automação. Para
 isso existe a **chave de API**: credencial de vida longa, com escopo próprio,
 revogável a qualquer momento e com cota separada.

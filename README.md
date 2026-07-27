@@ -113,8 +113,10 @@ curl https://conecta-crm.sejaap.com.br/api/crm/clientes/ \
   -H "Authorization: Api-Key crm_ab12cd34_<segredo>"
 ```
 
-Emissão também pelo admin (`/admin/crm/apikey/`). Detalhes em
-[`docs/10-integracao-externa.md`](docs/10-integracao-externa.md).
+Emissão também pelo admin (`/admin/crm/apikey/`). Gestão das chaves em
+[`docs/10-integracao-externa.md`](docs/10-integracao-externa.md); **manual completo
+de integração** (dicionário de campos, erros, receitas de n8n/Python/Sheets/Power BI
+e aplicações) em [`docs/11-api-guia-completo.md`](docs/11-api-guia-completo.md).
 
 ## Testes
 
