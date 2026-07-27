@@ -127,17 +127,24 @@ cd frontend && npm run build                       # valida a compilação
 
 ## Deploy (produção) — Conecta_CRM na VPS
 
-Roda como stack Docker isolada (`docker-compose.yml`, projeto `conecta-crm`) na
-mesma VPS do Conecta, atrás do **nginx do host** (que termina o TLS via Cloudflare
-Origin Certificate), sob um **subdomínio** — banco no **Supabase**.
+Roda como stack Docker isolada (`docker-compose.yml`, projeto `conecta-crm`) na VPS
+de soluções internas (`prod.solucoes.sejaap`, 187.77.48.164), atrás do **nginx do
+host** (que termina o TLS via Cloudflare Origin Certificate). **Ambiente único: não
+há homologação.**
 
 ```
-conecta-crm.sejaap.com.br ──Cloudflare──▶ nginx do host ──▶ [frontend nginx] ──/api──▶ [backend gunicorn] ──▶ Supabase
+conecta-crm.sejaap.com.br ──Cloudflare──▶ nginx do host ──▶ [frontend nginx]
+    ──/api──▶ [backend gunicorn] ──▶ [db-tunnel autossh] ──SSH──▶ funil-postgres (db-sejaap)
 ```
+
+O banco é o `funil_vendas` no **funil-postgres** da VPS db-sejaap; a porta 5434 é
+loopback-only lá, então o backend chega nela pelo container `db-tunnel`.
 
 Frontend e API ficam na **mesma origem** (o nginx do container faz proxy de `/api`),
-então **não há CORS**. O passo a passo completo (Cloudflare DNS, clone na VPS,
-`docker compose up`, nginx do host) está em [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md).
+então **não há CORS**. Deploy do dia a dia, procedimento de migration, rollback e
+instalação do zero em [`deploy/RUNBOOK.md`](deploy/RUNBOOK.md); operação em
+[`docs/09-deploy-operacao.md`](docs/09-deploy-operacao.md).
 
 Artefatos: `backend/Dockerfile`, `frontend/Dockerfile` + `frontend/nginx.conf`,
-`docker-compose.yml`, `deploy/.env.prod.example`, `deploy/nginx-host-conecta-crm.conf`.
+`docker-compose.yml`, `deploy/db-tunnel/`, `deploy/.env.prod.example`,
+`deploy/nginx-host-conecta-crm.conf`.

@@ -22,7 +22,10 @@ python manage.py runserver 8000
 ```
 
 Por padrão em dev usa **SQLite** (`backend/db.sqlite3`), sem precisar de Postgres.
-Para apontar ao Supabase em dev, defina `DATABASE_URL` no `.env`.
+Para apontar a um Postgres em dev, defina `DATABASE_URL` no `.env`.
+
+> Se o seu `.env` local aponta para um Postgres, force o SQLite ao rodar os testes:
+> `DATABASE_URL= CRM_DB_ENGINE=sqlite python manage.py test apps.crm`
 
 Usuário demo: `demo@sejaap.com` / `demo12345` (login no app por e-mail; no admin por
 username `demo`).

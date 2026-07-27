@@ -6,7 +6,7 @@
 |--------|-----------|
 | Frontend | React 18, Vite 5, Material UI 7, Emotion, Recharts, @dnd-kit, axios, react-router 6 — **JavaScript/JSX (sem TypeScript)** |
 | Backend | Django 5, Django REST Framework, SimpleJWT, WhiteNoise, gunicorn — Python 3.12 |
-| Banco | PostgreSQL 17 gerenciado (Supabase) |
+| Banco | PostgreSQL 16 self-hosted (`funil-postgres` na VPS db-sejaap), via túnel SSH |
 | Infra | Docker Compose, nginx (host), Cloudflare (DNS + TLS) |
 
 A escolha da stack espelha o ConectaAP (mesmo padrão de front MUI e back Django/DRF),
@@ -28,7 +28,9 @@ nginx do HOST (VPS)  ── termina TLS, proxy para 127.0.0.1:8090
    │   /api, /admin, /static  ──proxy──▶  [container conecta-crm-backend] (gunicorn/Django)
    │                                              │
    │                                              ▼
-   └── demais rotas → index.html (SPA)      PostgreSQL (Supabase, via Session pooler)
+   │                                    [container conecta-crm-db-tunnel] (autossh)
+   │                                              │  SSH
+   └── demais rotas → index.html (SPA)      funil-postgres na VPS db-sejaap
 ```
 
 **Ponto-chave:** frontend e API ficam na **mesma origem** (`conecta-crm.sejaap.com.br`).
@@ -59,7 +61,11 @@ O backend **não** é exposto na rede externa — só o frontend (via nginx do h
 - **Backend próprio (Django) em vez de Supabase direto:** o MVP falava direto com o
   Supabase; aqui há uma camada Django para centralizar auth (JWT), regras de negócio
   (comissão, importação), permissões de base compartilhada e uma API estável. O
-  Supabase é usado apenas como **Postgres gerenciado**.
+  banco é só um Postgres — foi por isso que trocá-lo pelo `funil-postgres`
+  self-hosted (2026-07-23) não exigiu mudança nenhuma no código.
+- **Banco self-hosted atrás de túnel SSH:** o `funil-postgres` fica na db-sejaap com
+  a porta fechada para a internet; o acesso é por um container `autossh` com chave
+  restrita a encaminhar aquela porta. Tira a dependência de SaaS sem abrir o banco.
 - **Base compartilhada pela equipe:** todo usuário autenticado enxerga toda a base
   (corrige o RLS por-usuário quebrado do MVP). Ver [02 — Backend](02-backend.md).
 - **Views function-based (`@api_view`), sem ViewSets:** espelha o padrão do app

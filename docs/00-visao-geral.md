@@ -53,10 +53,12 @@ próprias por funil no futuro).
 
 ## Ambientes
 
+**Só existe produção** — não há homologação (o domínio `conecta-crm-homolog` foi
+descontinuado em 2026-07-23).
+
 | Ambiente | URL | Infra |
 |----------|-----|-------|
-| Produção | https://conecta-crm.sejaap.com.br | VPS conecta-prod (187.77.48.159) |
-| Homologação | https://conecta-crm-homolog.sejaap.com.br | VPS conecta-homolog (187.77.48.164) |
+| Produção | https://conecta-crm.sejaap.com.br | VPS `prod.solucoes.sejaap` (187.77.48.164) |
 
-Ambos usam o **mesmo banco Supabase** (base compartilhada). Detalhes de deploy em
-[09 — Deploy e operação](09-deploy-operacao.md).
+Banco: `funil_vendas` no funil-postgres da VPS db-sejaap, alcançado por túnel SSH.
+Detalhes de deploy em [09 — Deploy e operação](09-deploy-operacao.md).

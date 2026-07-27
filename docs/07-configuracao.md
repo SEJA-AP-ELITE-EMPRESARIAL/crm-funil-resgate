@@ -13,7 +13,7 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 | `CSRF_TRUSTED_ORIGINS` | vazio | Origens https confiáveis (para o admin) |
 | `SECURE_SSL_REDIRECT` | `true` (se DEBUG=false) | **`false` na VPS** — o nginx/Cloudflare já forçam HTTPS (evita loop no healthcheck) |
 | `CORS_ALLOWED_ORIGINS` | origens de dev | Em produção é mesma origem → quase irrelevante |
-| `DATABASE_URL` | — | String Postgres do Supabase (Session pooler). Tem prioridade sobre as `POSTGRES_*` |
+| `DATABASE_URL` | — | String Postgres. Em produção aponta para o `db-tunnel` do compose (funil-postgres na db-sejaap). Tem prioridade sobre as `POSTGRES_*` |
 | `DB_SSLMODE` | `require` (DATABASE_URL) | SSL do Postgres |
 | `CRM_DB_ENGINE` | `sqlite` | `postgres` para usar as `POSTGRES_*` (alternativa ao `DATABASE_URL`) |
 | `POSTGRES_DB/USER/PASSWORD/HOST/PORT` | — | Só quando `CRM_DB_ENGINE=postgres` e sem `DATABASE_URL` |
@@ -27,14 +27,19 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 ```env
 DJANGO_DEBUG=false
 DJANGO_SECRET_KEY=<forte>
-DJANGO_ALLOWED_HOSTS=conecta-crm.sejaap.com.br,conecta-crm-homolog.sejaap.com.br,localhost,127.0.0.1
-CSRF_TRUSTED_ORIGINS=https://conecta-crm.sejaap.com.br,https://conecta-crm-homolog.sejaap.com.br
+DJANGO_ALLOWED_HOSTS=conecta-crm.sejaap.com.br,localhost,127.0.0.1
+CSRF_TRUSTED_ORIGINS=https://conecta-crm.sejaap.com.br
 SECURE_SSL_REDIRECT=false
-DATABASE_URL=postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://funil_app:<senha>@db-tunnel:5434/funil_vendas
 DB_SSLMODE=require
+CRM_API_RATE=120/min
 CRM_COMISSAO_RATE=0.03
 CRM_MESES_CONTRATO_PADRAO=12
 ```
+
+O host `db-tunnel` é o **serviço do compose** que mantém o túnel SSH até o
+funil-postgres na db-sejaap — não é um DNS público. Ver
+[09](09-deploy-operacao.md).
 
 ## Frontend
 

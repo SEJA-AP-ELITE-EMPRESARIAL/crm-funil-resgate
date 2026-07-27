@@ -1,14 +1,34 @@
-# Conecta_CRM — stack isolada (backend Django + frontend nginx), fala com o Supabase.
-# Roda na VPS do Conecta, atrás do nginx do HOST (que termina o TLS).
+# Conecta_CRM — stack isolada (backend Django + frontend nginx).
+# Banco: funil-postgres na VPS db-sejaap (179.197.237.95), alcancado via db-tunnel (SSH).
+# A porta 5434 do banco continua fechada para a internet.
 #   docker compose up -d --build
 name: conecta-crm
 
 services:
+  # Tunel SSH ate o db-sejaap. Backend usa DATABASE_URL apontando para db-tunnel:5434.
+  db-tunnel:
+    build: ./deploy/db-tunnel
+    image: conecta-crm-db-tunnel:prod
+    container_name: conecta-crm-db-tunnel
+    restart: unless-stopped
+    environment:
+      TUNNEL_HOST: "179.197.237.95"
+      TUNNEL_USER: "root"
+      TUNNEL_PORT: "22"
+    volumes:
+      - /opt/conecta/env/db_tunnel_key:/keys/id:ro
+      - /opt/conecta/env/db_tunnel_known_hosts:/keys/known_hosts:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   backend:
     build: ./backend
     container_name: conecta-crm-backend
     env_file: .env
     restart: unless-stopped
+    depends_on:
+      - db-tunnel
     expose:
       - "8000"
     healthcheck:

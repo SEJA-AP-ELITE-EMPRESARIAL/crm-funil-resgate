@@ -2,17 +2,25 @@
 
 ## Onde fica
 
-**PostgreSQL 17 gerenciado no Supabase** (projeto `crm-funil-resgate`, ref
-`uemwpavjpfqoqgmdzxav`, região sa-east-1 / São Paulo). O mesmo banco atende homolog
-e produção (base compartilhada).
+**PostgreSQL 16 self-hosted** — container `funil-postgres` na VPS **db-sejaap**
+(179.197.237.95), banco `funil_vendas`, role `funil_app`. Um único banco atende a
+aplicação (não há ambiente de homologação).
 
-- Conexão do Django: variável `DATABASE_URL` (ver [07](07-configuracao.md)).
-- Recomendado o **Session pooler** (IPv4): host
-  `aws-1-sa-east-1.pooler.supabase.com:5432`, usuário `postgres.<ref>`.
-- Painel: `https://supabase.com/dashboard/project/uemwpavjpfqoqgmdzxav`.
+- A porta `5434` é **loopback-only** na db-sejaap: não há acesso direto pela
+  internet. O backend chega nela pelo serviço `db-tunnel` do compose (autossh) —
+  ver [09](09-deploy-operacao.md).
+- Conexão do Django: `DATABASE_URL=postgresql://funil_app:<senha>@db-tunnel:5434/funil_vendas`
+  (ver [07](07-configuracao.md)).
+- Compose do banco na db-sejaap: `/opt/funil/docker-compose.yml` (volume
+  `funil_pgdata`, rede `funil_net`, SSL on, backups em `/opt/funil/backups`).
 
-> O schema é gerido pelo **Django (migrations)** — não edite tabelas direto pelo
-> Supabase. Use o Supabase para inspeção (Table editor / SQL) e backups.
+> **Histórico:** até 2026-07-23 o banco era um Postgres gerenciado no Supabase
+> (projeto `uemwpavjpfqoqgmdzxav`). Os dados foram migrados por dump/restore com
+> contagens conferidas, e o projeto Supabase segue intacto mas **não é mais
+> consumido**.
+>
+> O schema é gerido pelo **Django (migrations)** — não edite tabelas direto no
+> Postgres.
 
 ## Tabelas do domínio
 
@@ -72,9 +80,10 @@ o usuário que o criou (apenas metadado — não controla visibilidade; ver
 | `0002_funil_cliente_funil` | cria `crm_funil` e a FK `funil` |
 | `0003_seed_funis` | cria os 3 funis e vincula clientes existentes |
 | `0004_...` | campos de indicação (indicador, faixa, prioridade, qtd) |
+| `0005_apikey` | cria `crm_apikey` (chaves de integração externa) |
 
-Aplicar: `python manage.py migrate`. **Como o banco é compartilhado**, aplique as
-migrations **uma vez** (cobre homolog e prod). Ver cuidados em [09](09-deploy-operacao.md).
+Aplicar: `python manage.py migrate`. Em produção, aplique **antes** de trocar o
+container que serve tráfego — o procedimento está em [09](09-deploy-operacao.md).
 
 ## Dados atuais (referência)
 
@@ -83,6 +92,16 @@ migrations **uma vez** (cobre homolog e prod). Ver cuidados em [09](09-deploy-op
 
 ## Backup
 
-O Supabase faz backups automáticos no plano do projeto. Para um dump manual, use o
-SQL editor / `pg_dump` com a connection string. Recomenda-se um dump antes de
-qualquer migration que altere schema.
+> ⚠️ **Não há backup automático do `funil_vendas` hoje.** O Kanban tem um
+> `/opt/kanban/backup.sh` agendado às 03:20 na mesma db-sejaap; o caminho é
+> espelhar esse script para o `funil-postgres`. Enquanto isso não existir, o único
+> backup é manual.
+
+Dump manual (na db-sejaap):
+```bash
+docker exec funil-postgres pg_dump -U funil_app -d funil_vendas \
+  --no-owner --no-privileges > /opt/funil/backups/funil_$(date +%F).sql
+```
+
+Faça um dump antes de qualquer migration que **altere ou remova** schema. Migration
+que só cria tabela é aditiva e reverte com `migrate crm <numero_anterior>`.

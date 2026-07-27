@@ -1,8 +1,8 @@
 # Documentação — Conecta_CRM
 
 CRM multi-funil para prospecção e reativação de clientes, construído na stack do
-ConectaAP (Django/DRF + React/MUI) com banco no Supabase. Rodando em produção nas
-VPS do Conecta.
+ConectaAP (Django/DRF + React/MUI) com Postgres self-hosted. Rodando em produção na
+VPS de soluções internas do Conecta.
 
 ## Índice
 
@@ -13,7 +13,7 @@ VPS do Conecta.
 | 02 | [Backend](02-backend.md) | App Django, models, services, views, auth, permissões |
 | 03 | [API](03-api.md) | Referência de todos os endpoints |
 | 04 | [Frontend](04-frontend.md) | Estrutura React, componentes, estado, tema |
-| 05 | [Banco de dados](05-banco-de-dados.md) | Schema, tabelas, relações, Supabase |
+| 05 | [Banco de dados](05-banco-de-dados.md) | Schema, tabelas, relações, funil-postgres |
 | 06 | [Regras de negócio](06-regras-de-negocio.md) | Funis, etapas, comissão, prioridade, importação |
 | 07 | [Configuração](07-configuracao.md) | Variáveis de ambiente (backend e frontend) |
 | 08 | [Desenvolvimento](08-desenvolvimento.md) | Setup local, rodar, testar |
@@ -23,8 +23,7 @@ VPS do Conecta.
 
 ## Links rápidos
 
-- **Produção:** https://conecta-crm.sejaap.com.br
-- **Homologação:** https://conecta-crm-homolog.sejaap.com.br
+- **Produção:** https://conecta-crm.sejaap.com.br (VPS `prod.solucoes.sejaap`, 187.77.48.164)
 - **Repositório:** `github.com/SEJA-AP-ELITE-EMPRESARIAL/crm-funil-resgate`
 - **Runbook operacional resumido:** [`../deploy/RUNBOOK.md`](../deploy/RUNBOOK.md)
 
@@ -32,5 +31,5 @@ VPS do Conecta.
 
 - **Backend:** Django 5 + Django REST Framework + SimpleJWT (Python 3.12)
 - **Frontend:** React 18 + Vite + Material UI 7 + Recharts + @dnd-kit (JavaScript, sem TS)
-- **Banco:** PostgreSQL gerenciado (Supabase)
-- **Deploy:** Docker Compose nas VPS do Conecta, atrás do nginx do host + Cloudflare
+- **Banco:** PostgreSQL 16 self-hosted (`funil-postgres` na db-sejaap), via túnel SSH
+- **Deploy:** Docker Compose na VPS do Conecta, atrás do nginx do host + Cloudflare
