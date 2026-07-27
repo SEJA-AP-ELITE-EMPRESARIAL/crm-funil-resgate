@@ -101,10 +101,25 @@ crm-funil-resgate/
 | GET/POST | `/api/crm/clientes/` | Lista (base compartilhada) / cria |
 | GET/PATCH/DELETE | `/api/crm/clientes/{id}/` | Detalha / atualiza (ex.: mover etapa) / remove |
 
+### Integração externa (n8n, ConectaAP, terceiros)
+
+Além do JWT do front, a API aceita **chave de API** — credencial de vida longa, com
+escopo (`leitura`/`escrita`), revogável e com cota própria:
+
+```bash
+python manage.py criar_api_key "n8n — sync diária" --usuario integracao --escopo leitura
+
+curl https://conecta-crm.sejaap.com.br/api/crm/clientes/ \
+  -H "Authorization: Api-Key crm_ab12cd34_<segredo>"
+```
+
+Emissão também pelo admin (`/admin/crm/apikey/`). Detalhes em
+[`docs/10-integracao-externa.md`](docs/10-integracao-externa.md).
+
 ## Testes
 
 ```bash
-cd backend && python manage.py test apps.crm     # 6 testes
+cd backend && python manage.py test apps.crm     # 29 testes
 cd frontend && npm run build                       # valida a compilação
 ```
 

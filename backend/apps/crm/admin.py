@@ -1,8 +1,8 @@
 """Admin do CRM — inspeção/curadoria da base (o CRUD real é pela API)."""
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils.html import format_html
 
-from apps.crm.models import Cliente, Funil
+from apps.crm.models import ApiKey, Cliente, Funil
 
 # Cores das etapas (espelham o design system do funil).
 _ETAPA_CORES = {
@@ -92,3 +92,61 @@ class ClienteAdmin(admin.ModelAdmin):
         if not obj.valor_contrato:
             return "—"
         return f"R$ {obj.comissao_mensal:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@admin.register(ApiKey)
+class ApiKeyAdmin(admin.ModelAdmin):
+    """Emissão e revogação das chaves de integração.
+
+    A chave em texto puro aparece UMA vez, como mensagem, logo após salvar —
+    o banco só guarda o hash. Depois disso, só resta gerar outra.
+    """
+
+    list_display = ("nome", "prefixo", "usuario", "escopo", "situacao", "ultimo_uso_em", "criado_em")
+    list_filter = ("escopo", "ativa")
+    search_fields = ("nome", "prefixo", "usuario__username", "usuario__email")
+    list_select_related = ("usuario",)
+    actions = ("revogar",)
+
+    def get_fields(self, request, obj=None):
+        campos = ["nome", "usuario", "escopo", "expira_em", "ativa"]
+        if obj is not None:
+            campos += ["prefixo", "ultimo_uso_em", "criado_por", "criado_em"]
+        return campos
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ()
+        # Trocar o usuário de uma chave em uso mudaria silenciosamente em nome
+        # de quem a integração age — bloqueado após a criação.
+        return ("usuario", "prefixo", "ultimo_uso_em", "criado_por", "criado_em")
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            super().save_model(request, obj, form, change)
+            return
+        chave = obj.definir_nova_chave()
+        obj.criado_por = request.user
+        super().save_model(request, obj, form, change)
+        self.message_user(
+            request,
+            format_html(
+                "Chave de <b>{}</b> gerada. Copie agora — ela não será exibida de novo:"
+                '<br><code style="user-select:all;font-size:13px">{}</code>',
+                obj.nome, chave,
+            ),
+            level=messages.WARNING,
+        )
+
+    @admin.display(description="Situação")
+    def situacao(self, obj):
+        if not obj.ativa:
+            return format_html('<span style="color:#C0392B;font-weight:600">revogada</span>')
+        if obj.expirada:
+            return format_html('<span style="color:#B7791F;font-weight:600">expirada</span>')
+        return format_html('<span style="color:#2E7D5B;font-weight:600">ativa</span>')
+
+    @admin.action(description="Revogar chaves selecionadas")
+    def revogar(self, request, queryset):
+        total = queryset.update(ativa=False)
+        self.message_user(request, f"{total} chave(s) revogada(s).", level=messages.SUCCESS)

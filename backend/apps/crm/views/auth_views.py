@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.crm.models import EtapaFunil
+from apps.crm.models import ApiKey, EtapaFunil
 
 User = get_user_model()
 
@@ -40,14 +40,25 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 @permission_classes([IsAuthenticated])
 def me(request):
     u = request.user
-    return Response({
+    dados = {
         "id": u.id,
         "username": u.get_username(),
         "email": u.email,
         "nome": (u.get_full_name() or u.get_username()),
         "is_staff": u.is_staff,
         "is_superuser": u.is_superuser,
-    })
+    }
+    # Autenticado por chave de API: devolve qual chave e com que escopo —
+    # é o endpoint que uma integração usa para conferir se a credencial funciona.
+    api_key = getattr(request, "auth", None)
+    if isinstance(api_key, ApiKey):
+        dados["api_key"] = {
+            "nome": api_key.nome,
+            "prefixo": api_key.prefixo,
+            "escopo": api_key.escopo,
+            "expira_em": api_key.expira_em,
+        }
+    return Response(dados)
 
 
 @api_view(["GET"])

@@ -1,8 +1,8 @@
 # 03 — Referência da API
 
 Base: `https://conecta-crm.sejaap.com.br` (prod) ou `http://localhost:5173` (dev, via
-proxy do Vite). Todas as rotas de dados exigem `Authorization: Bearer <access>`,
-exceto onde indicado.
+proxy do Vite). Todas as rotas de dados exigem autenticação — **JWT** (front) ou
+**chave de API** (integração externa) —, exceto onde indicado.
 
 ## Autenticação
 
@@ -27,12 +27,32 @@ Aceita **e-mail ou username** no campo `username`.
 { "token": "eyJ..." }  →  200 (válido) | 401 (inválido)
 ```
 
+### Chave de API (integração externa)
+
+Para consumidores que não são o front (n8n, ConectaAP, scripts): credencial de vida
+longa, revogável, sem refresh. Ver [10 — Integração externa](10-integracao-externa.md)
+para emissão, escopos e limites.
+
+```http
+GET /api/crm/clientes/
+Authorization: Api-Key crm_ab12cd34_<segredo>
+```
+Alternativa equivalente: header `X-API-Key: crm_ab12cd34_<segredo>`.
+
 ## Sessão e configuração
 
 ### `GET /api/crm/me/` — usuário logado
 ```json
 { "id": 3, "username": "mathias.waibel", "email": "...", "nome": "...",
   "is_staff": true, "is_superuser": true }
+```
+
+Quando a autenticação é por chave de API, a resposta traz também qual chave está
+sendo usada — é o endpoint para conferir se a credencial funciona:
+```json
+{ "id": 7, "username": "integracao", "...": "...",
+  "api_key": { "nome": "n8n — sync diária", "prefixo": "ab12cd34",
+               "escopo": "leitura", "expira_em": null } }
 ```
 
 ### `GET /api/crm/config/` — **público** (AllowAny)

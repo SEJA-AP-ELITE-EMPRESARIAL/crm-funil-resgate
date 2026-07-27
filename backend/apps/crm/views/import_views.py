@@ -6,13 +6,14 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.crm.permissions import HasApiScope
 from apps.crm.services.importacao import gerar_modelo_xlsx, importar_clientes
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasApiScope])
 @parser_classes([MultiPartParser])
 def importar(request):
     arquivo = request.FILES.get("arquivo")
@@ -28,7 +29,7 @@ def importar(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasApiScope])
 def modelo_importacao(request):
     conteudo = gerar_modelo_xlsx()
     resp = HttpResponse(conteudo, content_type=_XLSX)

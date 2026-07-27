@@ -19,6 +19,7 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 | `POSTGRES_DB/USER/PASSWORD/HOST/PORT` | — | Só quando `CRM_DB_ENGINE=postgres` e sem `DATABASE_URL` |
 | `CRM_COMISSAO_RATE` | `0.03` | Taxa de comissão (fração) |
 | `CRM_MESES_CONTRATO_PADRAO` | `12` | Meses padrão quando o cliente não define |
+| `CRM_API_RATE` | `120/min` | Cota por chave de API (formato do DRF, ex.: `120/min`, `5000/day`). Não afeta o front — ver [10](10-integracao-externa.md) |
 
 **Precedência do banco:** `DATABASE_URL` → `CRM_DB_ENGINE=postgres` → SQLite (default dev).
 

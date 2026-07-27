@@ -6,7 +6,8 @@
 apps/crm/
 ├── models/
 │   ├── cliente.py       # Cliente + EtapaFunil (TextChoices)
-│   └── funil.py         # Funil
+│   ├── funil.py         # Funil
+│   └── api_key.py       # ApiKey + EscopoApiKey (integração externa)
 ├── serializers/
 │   ├── cliente.py       # ClienteSerializer (read) + ClienteWriteSerializer
 │   └── funil.py         # FunilSerializer
@@ -21,10 +22,17 @@ apps/crm/
 │   └── import_views.py  # importar + modelo .xlsx
 ├── management/commands/
 │   ├── seed_demo.py         # usuário demo + funis (sem exemplos por padrão)
-│   └── importar_indicados.py# importa a planilha do APN
+│   ├── importar_indicados.py# importa a planilha do APN
+│   └── criar_api_key.py     # emite chave de API pela CLI
 ├── migrations/
-├── tests/test_api.py    # 10 testes
-├── admin.py             # Django Admin (Funil + Cliente)
+├── tests/
+│   ├── test_api.py      # 10 testes
+│   └── test_api_key.py  # 19 testes (integração externa)
+├── authentication.py    # ApiKeyAuthentication
+├── permissions.py       # HasApiScope (leitura × escrita)
+├── throttling.py        # ApiKeyRateThrottle (cota por chave)
+├── pagination.py        # paginação opt-in de clientes
+├── admin.py             # Django Admin (Funil + Cliente + ApiKey)
 └── urls.py              # rotas do app
 ```
 
@@ -77,14 +85,37 @@ Cliente/lead trabalhado em um funil. Campos principais:
 
 `Meta`: `ordering = ("ordem", "nome")`, índices em `etapa`, `quem_fara_contato` e `funil`.
 
+### `ApiKey` (`models/api_key.py`)
+
+Credencial de integração externa. Formato `crm_<prefixo>_<segredo>`; o banco guarda
+só o **SHA-256 da chave completa** — o texto puro aparece uma vez, na criação.
+
+| Campo | Observação |
+|-------|-----------|
+| `nome` | identificação (ex.: "n8n — sync diária") |
+| `prefixo` (8 chars) | parte pública, indexada; localiza o registro na validação |
+| `hash_chave` | SHA-256; comparado com `secrets.compare_digest` |
+| `usuario` (FK→User) | em nome de quem a chave age → vira `criado_por` nos registros |
+| `escopo` | `leitura` (só GET) ou `escrita` (tudo) |
+| `ativa` / `expira_em` | revogação imediata / validade opcional |
+| `ultimo_uso_em` | gravado no máximo 1×/min, para não gerar um UPDATE por request |
+
 ## Autenticação
+
+Duas credenciais convivem — o front usa JWT, integrações usam chave de API:
 
 - **JWT via SimpleJWT.** `ACCESS_TOKEN_LIFETIME = 240min`, `REFRESH = 7 dias`.
 - Endpoints no urlconf raiz: `/api/token/`, `/api/token/refresh/`, `/api/token/verify/`.
 - **Login por e-mail OU username:** `EmailOrUsernameTokenSerializer`
   (`views/auth_views.py`) resolve e-mail → username antes de autenticar. Assim o
   app loga com e-mail e o Django Admin loga com o username.
-- Default global: `DEFAULT_PERMISSION_CLASSES = [IsAuthenticated]`.
+- **Chave de API** (`authentication.py`): headers `Authorization: Api-Key <chave>`
+  ou `X-API-Key`. Só reivindica o request quando o esquema é o dela, então o
+  `Bearer` do front segue direto para o JWT. Ver [10](10-integracao-externa.md).
+- Default global: `DEFAULT_PERMISSION_CLASSES = [IsAuthenticated]`; as views de
+  dados somam `HasApiScope`, que exige escopo de escrita em métodos não-seguros.
+- **Rate limit** (`throttling.py`): cota por chave (`CRM_API_RATE`, default
+  `120/min`). Requisições JWT não são limitadas.
 
 ## Permissões — base compartilhada
 
@@ -138,13 +169,22 @@ Lista aceita filtro opcional `?funil=<id|slug>`. Detalhe/alteração/remoção e
 - **`ClienteAdmin`**: colunas com etapa colorida (`format_html`), valor e comissão
   formatados; filtros por funil/etapa/consultor/estado; busca por nome/cnpj/email;
   `list_select_related` para evitar N+1.
+- **`ApiKeyAdmin`**: emissão e revogação das chaves de integração. A chave em texto
+  puro é exibida uma única vez, como mensagem, após salvar. `usuario` e `prefixo`
+  viram read-only depois da criação; ação em lote "Revogar chaves selecionadas".
 
 ## Testes
 
-`python manage.py test apps.crm` — 10 testes cobrindo: exigência de auth, base
-compartilhada, `criado_por` na criação, comissão parametrizada por `meses_contrato`,
-padrão de meses, `nome` obrigatório, funis semeados, filtro por funil, dados do funil
-no serializer e importação de Excel (válidos + erros).
+`python manage.py test apps.crm` — 29 testes.
+
+- **`test_api.py`** (10): exigência de auth, base compartilhada, `criado_por` na
+  criação, comissão parametrizada por `meses_contrato`, padrão de meses, `nome`
+  obrigatório, funis semeados, filtro por funil, dados do funil no serializer e
+  importação de Excel (válidos + erros).
+- **`test_api_key.py`** (19): hash no lugar do segredo, os dois headers, chave
+  inválida/revogada/expirada/usuário inativo, escopo de leitura barrando escrita,
+  escrita criando com o `criado_por` certo, registro de uso, paginação opt-in,
+  cota por chave e a garantia de que o JWT do front não foi afetado.
 
 ## Comandos de management
 
@@ -152,3 +192,5 @@ no serializer e importação de Excel (válidos + erros).
   cria clientes fictícios por padrão; use `--com-exemplos` para popular carteira demo.
 - **`importar_indicados <arquivo.xlsx>`** — importa a aba "Indicados" das planilhas do
   APN para o funil `indicados_apn`. Flags: `--aba`, `--funil`, `--dry-run`, `--limpar`.
+- **`criar_api_key <nome> --usuario <login>`** — emite chave de integração pela CLI.
+  Flags: `--escopo {leitura,escrita}`, `--dias <n>`. Imprime a chave uma única vez.

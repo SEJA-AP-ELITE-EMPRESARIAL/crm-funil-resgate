@@ -18,6 +18,7 @@ VPS do Conecta.
 | 07 | [Configuração](07-configuracao.md) | Variáveis de ambiente (backend e frontend) |
 | 08 | [Desenvolvimento](08-desenvolvimento.md) | Setup local, rodar, testar |
 | 09 | [Deploy e operação](09-deploy-operacao.md) | VPS, Docker, nginx, CI, updates, troubleshooting |
+| 10 | [Integração externa](10-integracao-externa.md) | Chaves de API, escopos, limites, paginação |
 
 ## Links rápidos
 

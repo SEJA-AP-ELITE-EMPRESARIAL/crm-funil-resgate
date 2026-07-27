@@ -1,7 +1,8 @@
 """
 Views do cliente (function-based, dispatcher por método — padrão ConectaAP).
 
-Autenticação JWT + IsAuthenticated. Base compartilhada: sem filtro por dono.
+Autenticação JWT (front) ou chave de API (integração) + IsAuthenticated.
+Base compartilhada: sem filtro por dono.
 """
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -9,6 +10,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from apps.crm.pagination import ClientePagination, paginacao_solicitada
+from apps.crm.permissions import HasApiScope
 from apps.crm.serializers import ClienteSerializer, ClienteWriteSerializer
 from apps.crm.services import ClienteService
 
@@ -16,7 +19,7 @@ from ._helpers import clientes_base
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasApiScope])
 def cliente_root(request):
     if request.method == "POST":
         return _criar(request)
@@ -24,7 +27,7 @@ def cliente_root(request):
 
 
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasApiScope])
 def cliente_item(request, cliente_id: int):
     cliente = get_object_or_404(clientes_base(), pk=cliente_id)
     if request.method == "DELETE":
@@ -46,6 +49,19 @@ def _listar(request):
             clientes = clientes.filter(funil_id=int(funil))
         else:
             clientes = clientes.filter(funil__slug=funil)
+
+    # Paginação opt-in (consumidores externos); sem `?page`/`?page_size` a
+    # resposta continua sendo a base inteira, como o front espera.
+    if paginacao_solicitada(request):
+        paginator = ClientePagination()
+        pagina = paginator.paginate_queryset(clientes, request)
+        return Response({
+            "count": paginator.page.paginator.count,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "results": ClienteSerializer(pagina, many=True).data,
+        })
+
     return Response({"results": ClienteSerializer(clientes, many=True).data})
 
 

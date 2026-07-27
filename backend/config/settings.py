@@ -168,9 +168,16 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # === DRF + JWT (espelha config do ConectaAP) ===
+# Taxa aplicada por chave de API (formato do DRF). Sessões JWT do front não são
+# limitadas — ver apps/crm/throttling.py.
+CRM_API_RATE = os.environ.get("CRM_API_RATE", "120/min")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        # JWT primeiro (front); a chave de API só reivindica o request quando
+        # o header traz "Api-Key" ou X-API-Key.
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.crm.authentication.ApiKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -178,6 +185,12 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "apps.crm.throttling.ApiKeyRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "api_key": CRM_API_RATE,
+    },
 }
 
 SIMPLE_JWT = {

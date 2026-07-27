@@ -3,11 +3,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.crm.models import Funil
+from apps.crm.permissions import HasApiScope
 from apps.crm.serializers import FunilSerializer
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, HasApiScope])
 def funil_list(request):
     """Lista os funis ativos (para o seletor global)."""
     funis = Funil.objects.filter(ativo=True)
