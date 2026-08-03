@@ -31,6 +31,14 @@ services:
       - db-tunnel
     expose:
       - "8000"
+    networks:
+      # `default` precisa estar AQUI. Declarar `networks` num serviço substitui
+      # a rede padrão em vez de somar a ela — sem esta linha o backend sairia da
+      # rede do compose e perderia o db-tunnel e o frontend de uma vez.
+      - default
+      # Rede do Conecta ID: é por aqui que o login central alcança
+      # `identidade-api:8000` (o serviço não publica porta nenhuma).
+      - identidade-net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/crm/config/')"]
       interval: 30s
@@ -53,3 +61,16 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+networks:
+  # Criada e mantida pela stack do Conecta ID (/opt/identidade/app), que roda
+  # nesta mesma VPS. `external: true` porque a dona é ela: se este compose
+  # tentasse criar a rede, um `docker compose down` daqui a removeria por baixo
+  # do serviço de identidade e derrubaria o login dos outros apps junto.
+  #
+  # Se a stack do Conecta ID nunca subiu nesta máquina, o `up` falha com
+  # "network identidade-net declared as external, but could not be found" — o
+  # que é melhor do que subir e só descobrir no primeiro login.
+  identidade-net:
+    name: identidade-net
+    external: true

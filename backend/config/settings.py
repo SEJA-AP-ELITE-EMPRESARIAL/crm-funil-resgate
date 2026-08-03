@@ -129,6 +129,36 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# === Login central (Conecta ID) ============================================
+# A senha deixa de morar neste banco e passa a ser verificada no Conecta ID
+# (serviço interno na prod.solucoes, sem porta pública). O que a pessoa é aqui
+# dentro — is_staff, chaves de API, clientes que criou — continua daqui. A
+# costura é o `VinculoIdentidade` (apps/crm/models/identidade.py).
+#
+# AUTH_CENTRAL_ATIVO é a chave que reverte tudo: com ela desligada o
+# BackendIdentidade sai da frente e o login volta a ser o local, sem migration e
+# sem deploy de emergência. Padrão FALSE de propósito — virar a chave antes de
+# rodar `vincular_identidades` deixaria todo mundo do lado de fora.
+AUTH_CENTRAL_ATIVO = os.environ.get("AUTH_CENTRAL_ATIVO", "False").strip().lower() in (
+    "true",
+    "1",
+    "yes",
+)
+# Nome do serviço na rede docker `identidade-net`, não um host público.
+IDENTIDADE_URL = os.environ.get("IDENTIDADE_URL", "http://identidade-api:8000")
+IDENTIDADE_APP_KEY = os.environ.get("IDENTIDADE_APP_KEY", "")
+IDENTIDADE_TIMEOUT = int(os.environ.get("IDENTIDADE_TIMEOUT", "5"))
+IDENTIDADE_RESOLVER_USUARIO = "apps.crm.models.resolver_usuario"
+
+# O backend central fica ANTES do ModelBackend. Com a chave desligada ele
+# devolve None de imediato e nada muda; com ela ligada, o ModelBackend continua
+# atendendo o superusuário do /admin/ e as contas que ainda não têm identidade.
+# Ele sai de cena no expurgo, quando as senhas locais forem removidas.
+AUTHENTICATION_BACKENDS = [
+    "identidade_client.BackendIdentidade",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
 # === i18n ===
 LANGUAGE_CODE = "pt-br"
 TIME_ZONE = "America/Sao_Paulo"
