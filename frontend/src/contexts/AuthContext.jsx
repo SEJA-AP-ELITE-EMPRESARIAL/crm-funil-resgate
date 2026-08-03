@@ -43,10 +43,12 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("crm-token-expired", onExpire);
   }, [carregarUsuario]);
 
-  const login = useCallback(async (loginOuEmail, senha) => {
+  const login = useCallback(async (email, senha) => {
     try {
+      // Só e-mail: o username deixou de ser credencial quando o login passou
+      // para o Conecta ID, que identifica a pessoa pelo e-mail.
       const { data } = await api.post("/api/token/", {
-        username: loginOuEmail,
+        email,
         password: senha,
       });
       setTokens({ access: data.access, refresh: data.refresh });
@@ -58,7 +60,9 @@ export function AuthProvider({ children }) {
       const msg =
         status === 401
           ? "E-mail ou senha incorretos"
-          : error.response?.data?.detail || "Falha ao entrar. Tente novamente.";
+          : // 429 (excesso de tentativas) e 503 (Conecta ID fora do ar) trazem
+            // `detail` próprio e NÃO podem virar "senha incorreta" na tela.
+            error.response?.data?.detail || "Falha ao entrar. Tente novamente.";
       return { success: false, error: msg };
     }
   }, []);
