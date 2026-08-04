@@ -192,6 +192,92 @@ def me(request):
     return Response(dados)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def trocar_senha(request):
+    """POST /api/crm/senha/ — a pessoa troca a **própria** senha.
+
+    Body: `{"senha_atual": "...", "nova_senha": "..."}`.
+
+    Só existe no modo central. Sem vínculo, a senha continua sendo a local e
+    quem a troca é o `/admin/` do Django — que é como o CRM sempre funcionou.
+    Aceitar aqui e gravar `set_password` daria à pessoa a impressão de ter
+    trocado algo que o login seguinte ignoraria.
+    """
+    from apps.crm import identidade_senha
+
+    if not identidade_senha.usa_central(request.user):
+        return Response(
+            {
+                "detail": (
+                    "Esta conta ainda não usa o login central. "
+                    "Peça a troca a um administrador."
+                )
+            },
+            status=409,
+        )
+
+    atual = request.data.get("senha_atual") or ""
+    nova = request.data.get("nova_senha") or ""
+    if not atual or not nova:
+        return Response({"detail": "Informe 'senha_atual' e 'nova_senha'."}, status=400)
+    if atual == nova:
+        return Response(
+            {"nova_senha": "A nova senha precisa ser diferente da atual."}, status=400
+        )
+
+    try:
+        identidade_senha.trocar(
+            request.user, atual, nova, ip=identidade_senha.ip_do_request(request)
+        )
+    except identidade_senha.CredencialInvalida:
+        return Response({"senha_atual": "Senha atual incorreta."}, status=400)
+    except identidade_senha.SenhaFraca as erro:
+        return Response({"nova_senha": str(erro)}, status=400)
+    except identidade_senha.IdentidadeIndisponivel:
+        return Response(
+            {"detail": "Não foi possível trocar a senha agora. Tente em instantes."},
+            status=503,
+        )
+    return Response({"detail": "Senha alterada."})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def definir_senha(request):
+    """POST /api/crm/senha/definir/ — consome o link gerado no kanban.
+
+    Público de propósito: é o caminho de quem **não consegue entrar**. A prova é
+    o token de uso único, e quem o valida é o Conecta ID.
+
+    Mensagem de erro deliberadamente genérica: distinguir "token nunca existiu"
+    de "token já usado" entregaria a um estranho um oráculo sobre links que ele
+    não emitiu.
+    """
+    from apps.crm import identidade_senha
+
+    token = (request.data.get("token") or "").strip()
+    nova = request.data.get("nova_senha") or ""
+    if not token or not nova:
+        return Response({"detail": "Informe 'token' e 'nova_senha'."}, status=400)
+
+    try:
+        identidade_senha.definir_por_token(token, nova)
+    except identidade_senha.TokenInvalido:
+        return Response(
+            {"detail": "Link inválido ou expirado. Peça um novo a um administrador."},
+            status=400,
+        )
+    except identidade_senha.SenhaFraca as erro:
+        return Response({"nova_senha": str(erro)}, status=400)
+    except identidade_senha.IdentidadeIndisponivel:
+        return Response(
+            {"detail": "Não foi possível definir a senha agora. Tente em instantes."},
+            status=503,
+        )
+    return Response({"detail": "Senha definida. Você já pode entrar."})
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def config(request):

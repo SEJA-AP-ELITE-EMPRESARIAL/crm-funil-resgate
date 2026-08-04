@@ -270,3 +270,100 @@ class ResolucaoDoUsuarioTest(BaseLogin):
     def test_sem_vinculo_o_campo_e_falso(self):
         self.client.force_authenticate(user=self.ana)
         self.assertFalse(self.client.get("/api/crm/me/").data["precisa_trocar_senha"])
+
+
+@CENTRAL_LIGADA
+class SenhaPeloConectaIdTest(BaseLogin):
+    """Trocar e definir senha quando ela mora no serviço central.
+
+    O erro que estes testes impedem é o mais traiçoeiro da migração:
+    `set_password` local continua funcionando e continua devolvendo 200 depois
+    do corte — só que não muda nada, porque quem responde no login seguinte é o
+    Conecta ID.
+    """
+
+    TROCAR = "/api/crm/senha/"
+    DEFINIR = "/api/crm/senha/definir/"
+
+    def setUp(self):
+        super().setUp()
+        VinculoIdentidade.objects.create(usuario=self.ana, identidade_id=IDENTIDADE)
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_troca_vai_para_o_conecta_id_e_nao_toca_na_senha_local(self, trocar):
+        hash_antes = User.objects.get(pk=self.ana.pk).password
+        self.client.force_authenticate(user=self.ana)
+
+        r = self.client.post(
+            self.TROCAR,
+            {"senha_atual": SENHA, "nova_senha": "outra-senha-bem-longa-987"},
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 200, r.data)
+        trocar.assert_called_once()
+        self.assertEqual(trocar.call_args.args[0], IDENTIDADE)
+        self.assertEqual(User.objects.get(pk=self.ana.pk).password, hash_antes)
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_senha_atual_errada_volta_no_campo_certo(self, trocar):
+        trocar.side_effect = CredencialInvalida("Credenciais inválidas.")
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.post(
+            self.TROCAR,
+            {"senha_atual": "chute", "nova_senha": "outra-senha-bem-longa-987"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("senha_atual", r.data)
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_quem_nao_migrou_recebe_409_em_vez_de_troca_que_nao_vale(self, trocar):
+        """Sem vínculo, a senha é a local — e o CRM não a troca por aqui.
+
+        Aceitar e gravar `set_password` daria à pessoa a impressão de ter
+        trocado algo que o login seguinte ignoraria.
+        """
+        bruno = User.objects.create_user("bruno", "bruno@x.com", SENHA)
+        self.client.force_authenticate(user=bruno)
+        r = self.client.post(
+            self.TROCAR,
+            {"senha_atual": SENHA, "nova_senha": "outra-senha-bem-longa-987"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 409)
+        trocar.assert_not_called()
+
+    @patch("identidade_client.ClienteIdentidade.definir_senha")
+    def test_definir_por_token_e_publico(self, definir):
+        """Sem autenticar: é justamente o caminho de quem não consegue entrar."""
+        r = self.client.post(
+            self.DEFINIR,
+            {"token": "tok-123", "nova_senha": "senha-nova-bem-longa-321"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.data)
+        definir.assert_called_once_with("tok-123", "senha-nova-bem-longa-321")
+
+    @patch("identidade_client.ClienteIdentidade.definir_senha")
+    def test_token_invalido_nao_diz_o_motivo(self, definir):
+        from identidade_client import TokenInvalido
+
+        definir.side_effect = TokenInvalido("token ja consumido em 03/08 as 14h")
+        r = self.client.post(
+            self.DEFINIR,
+            {"token": "tok-velho", "nova_senha": "senha-nova-bem-longa-321"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertNotIn("consumido", str(r.data).lower())
+
+    @patch("identidade_client.ClienteIdentidade.definir_senha")
+    def test_servico_fora_do_ar_vira_503(self, definir):
+        definir.side_effect = IdentidadeIndisponivel("fora do ar")
+        r = self.client.post(
+            self.DEFINIR,
+            {"token": "tok-123", "nova_senha": "senha-nova-bem-longa-321"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 503)
