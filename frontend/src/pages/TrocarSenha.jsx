@@ -20,7 +20,7 @@ import api from "@/services/api";
  */
 export default function TrocarSenha() {
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, recarregar } = useAuth();
 
   const [atual, setAtual] = useState("");
   const [nova, setNova] = useState("");
@@ -41,6 +41,10 @@ export default function TrocarSenha() {
     setEnviando(true);
     try {
       await api.post("/api/crm/senha/", { senha_atual: atual, nova_senha: nova });
+      // O backend já limpou a marca; isto traz o /me novo para o contexto. Sem
+      // esta linha o PrivateRoute devolveria a pessoa para esta mesma tela ao
+      // tentar voltar ao funil — dizendo "não deu certo" logo depois de dar.
+      await recarregar();
       setPronto(true);
     } catch (err) {
       const dados = err.response?.data || {};

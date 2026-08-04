@@ -306,6 +306,31 @@ class SenhaPeloConectaIdTest(BaseLogin):
         self.assertEqual(User.objects.get(pk=self.ana.pk).password, hash_antes)
 
     @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_troca_limpa_a_marca_de_troca_obrigatoria_na_hora(self, trocar):
+        """Sem isto o PrivateRoute devolve a pessoa para a tela que ela cumpriu.
+
+        O Conecta ID zera o `forcar_troca_senha` dele, mas a cópia local só é
+        atualizada no LOGIN — e é ela que o /me devolve, que é o que o guard do
+        front lê.
+        """
+        VinculoIdentidade.objects.filter(usuario=self.ana).update(
+            precisa_trocar_senha=True
+        )
+        self.client.force_authenticate(user=self.ana)
+
+        r = self.client.post(
+            self.TROCAR,
+            {"senha_atual": SENHA, "nova_senha": "outra-senha-bem-longa-987"},
+            format="json",
+        )
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertFalse(
+            VinculoIdentidade.objects.get(usuario=self.ana).precisa_trocar_senha
+        )
+        self.assertFalse(self.client.get("/api/crm/me/").data["precisa_trocar_senha"])
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
     def test_senha_atual_errada_volta_no_campo_certo(self, trocar):
         trocar.side_effect = CredencialInvalida("Credenciais inválidas.")
         self.client.force_authenticate(user=self.ana)

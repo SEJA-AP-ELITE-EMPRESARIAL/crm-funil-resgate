@@ -239,6 +239,15 @@ def trocar_senha(request):
             {"detail": "Não foi possível trocar a senha agora. Tente em instantes."},
             status=503,
         )
+    # Limpa a marca AGORA. O Conecta ID já zerou o `forcar_troca_senha` dele,
+    # mas a cópia local só é atualizada no login — e é ela que o /me devolve.
+    # Sem isto, quem acabou de trocar a senha continuaria preso na tela de troca
+    # obrigatória até sair e entrar de novo.
+    from apps.crm.models import VinculoIdentidade
+
+    VinculoIdentidade.objects.filter(usuario=request.user).update(
+        precisa_trocar_senha=False
+    )
     return Response({"detail": "Senha alterada."})
 
 
