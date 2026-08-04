@@ -74,7 +74,11 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthCtx.Provider
-      value={{ user, loading, isAuthenticated: !!user, login, logout }}
+      // `recarregar` refaz o /me. Quem precisa dele é a tela de troca de senha:
+      // sem refazer, o `precisa_trocar_senha` em memória continuaria verdadeiro
+      // e o PrivateRoute devolveria a pessoa para a mesma tela que ela acabou
+      // de cumprir.
+      value={{ user, loading, isAuthenticated: !!user, login, logout, recarregar: carregarUsuario }}
     >
       {children}
     </AuthCtx.Provider>
