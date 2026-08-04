@@ -8,6 +8,9 @@ urlpatterns = [
     # Sessão / config
     path("me/", auth_views.me, name="me"),
     path("config/", auth_views.config, name="config"),
+    # Senha (só no modo central — ver apps/crm/identidade_senha.py)
+    path("senha/", auth_views.trocar_senha, name="trocar_senha"),
+    path("senha/definir/", auth_views.definir_senha, name="definir_senha"),
     # Funis
     path("funis/", funil_views.funil_list, name="funil_list"),
     # Etapas (colunas do Kanban)
