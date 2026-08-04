@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import FilterAltRoundedIcon from "@mui/icons-material/FilterAltRounded";
+import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
@@ -22,6 +23,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { Link as RotaLink } from "react-router-dom";
 
 import logoSejaAp from "@/assets/logo-sejaap.png";
 import { Dashboard } from "@/components/funil/Dashboard";
@@ -155,6 +157,19 @@ function FunilInner() {
                 {user.email || user.username}
               </Typography>
             )}
+            <Tooltip title="Trocar senha">
+              <Button
+                component={RotaLink}
+                to="/trocar-senha"
+                size="small"
+                variant="outlined"
+                startIcon={<LockResetRoundedIcon />}
+              >
+                <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                  Senha
+                </Box>
+              </Button>
+            </Tooltip>
             <Tooltip title="Sair">
               <Button onClick={logout} size="small" variant="outlined" startIcon={<LogoutRoundedIcon />}>
                 <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
