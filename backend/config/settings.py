@@ -154,9 +154,15 @@ IDENTIDADE_RESOLVER_USUARIO = "apps.crm.models.resolver_usuario"
 # devolve None de imediato e nada muda; com ela ligada, o ModelBackend continua
 # atendendo o superusuário do /admin/ e as contas que ainda não têm identidade.
 # Ele sai de cena no expurgo, quando as senhas locais forem removidas.
+# Um backend so. O `ModelBackend` saiu em 04/08/2026, junto com as senhas
+# locais, e a ausencia dele e a parte que importa: enquanto ele estava na lista,
+# qualquer caminho que chamasse `authenticate()` com um username — o formulario
+# do /admin/, por exemplo — passava por fora do Conecta ID sem que nada no
+# codigo de login parecesse errado.
+#
+# Consequencia pratica: o /admin/ agora exige o E-MAIL no campo "Usuario".
 AUTHENTICATION_BACKENDS = [
     "identidade_client.BackendIdentidade",
-    "django.contrib.auth.backends.ModelBackend",
 ]
 
 # === i18n ===

@@ -58,28 +58,24 @@ class BaseLogin(TestCase):
 
 
 class ChaveDesligadaTest(BaseLogin):
-    """Com `AUTH_CENTRAL_ATIVO=False` nada muda — nem uma chamada sai daqui."""
+    """Com `AUTH_CENTRAL_ATIVO=False` ninguém entra. A flag deixou de reverter.
+
+    Esta classe existia para provar o contrário: que desligar a chave devolvia o
+    login local intacto. Isso acabou em 04/08/2026, com o expurgo das senhas
+    locais e a saída do `ModelBackend`.
+
+    O teste continua aqui, invertido, porque a promessa antiga ("é só desligar a
+    flag") vai sobreviver na cabeça de quem leu o código antes — e o dia de
+    descobrir que ela não vale mais não pode ser o dia do incidente.
+    """
 
     @override_settings(AUTH_CENTRAL_ATIVO=False)
     @patch("identidade_client.ClienteIdentidade.verificar")
-    def test_login_local_continua_funcionando(self, verificar):
+    def test_desligar_a_chave_nao_devolve_o_login_local(self, verificar):
         resposta = self.entrar(self.ana.email)
-        self.assertEqual(resposta.status_code, 200)
-        self.assertIn("access", resposta.data)
-        verificar.assert_not_called()
 
-    @override_settings(AUTH_CENTRAL_ATIVO=False)
-    @patch("identidade_client.ClienteIdentidade.verificar")
-    def test_vinculo_nao_tranca_ninguem_com_a_chave_desligada(self, verificar):
-        """A guarda respeita a chave.
-
-        `vincular_identidades` roda ANTES do corte. Se o vínculo sozinho já
-        barrasse a senha local, vincular deixaria de ser inofensivo e passaria a
-        ser o próprio corte — sem ninguém ter decidido isso.
-        """
-        VinculoIdentidade.objects.create(usuario=self.ana, identidade_id=IDENTIDADE)
-        resposta = self.entrar(self.ana.email)
-        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.status_code, 401)
+        # E nem chega a perguntar ao serviço: o backend sai da frente sozinho.
         verificar.assert_not_called()
 
 
@@ -113,18 +109,19 @@ class SomenteEmailTest(BaseLogin):
         self.assertEqual(verificar.call_args_list[0].args[0], self.ana.email)
 
     @patch("identidade_client.ClienteIdentidade.verificar")
-    def test_username_local_ainda_alcanca_o_modelbackend(self, verificar):
-        """A tradução e-mail → username acontece aqui dentro, não na tela.
+    def test_senha_local_correta_nao_entra_mais(self, verificar):
+        """O `ModelBackend` saiu: não existe segundo caminho.
 
-        Sem ela o `ModelBackend` ficaria inalcançável, e com ele iriam junto o
-        superusuário do /admin/ e todo mundo que ainda não migrou.
+        A Ana tem senha local válida no banco de teste — é por isso que o teste
+        vale. Enquanto havia fallback, esta mesma chamada entrava.
         """
         verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
 
         resposta = self.entrar(self.ana.email)
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(verificar.call_args_list[0].args[0], self.ana.email)
+        self.assertEqual(resposta.status_code, 401)
+        # Uma tentativa, não duas: não há mais username para tentar depois.
+        self.assertEqual(verificar.call_count, 1)
 
 
 @CENTRAL_LIGADA
@@ -181,12 +178,16 @@ class SenhaLocalDepoisDoVinculoTest(BaseLogin):
         self.assertEqual(resposta.status_code, 401)
 
     @patch("identidade_client.ClienteIdentidade.verificar")
-    def test_quem_nao_migrou_ainda_entra_pela_senha_local(self, verificar):
-        """A rede de segurança da transição continua de pé para quem falta."""
+    def test_quem_nao_migrou_tambem_nao_entra(self, verificar):
+        """A rede de segurança da transição foi recolhida junto com o expurgo.
+
+        Antes, quem não tinha vínculo seguia entrando pela senha local. Hoje não
+        há para onde cair: sem identidade no Conecta ID, não há login.
+        """
         verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
         bruno = User.objects.create_user("bruno", "bruno@x.com", SENHA)
         resposta = self.entrar(bruno.email)
-        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.status_code, 401)
 
     @patch("identidade_client.ClienteIdentidade.verificar")
     def test_pelo_conecta_id_entra_normalmente(self, verificar):
