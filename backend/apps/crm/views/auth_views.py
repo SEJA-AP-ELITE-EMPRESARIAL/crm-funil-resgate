@@ -27,20 +27,18 @@ logger = logging.getLogger(__name__)
 
 
 class LoginPorEmailSerializer(TokenObtainPairSerializer):
-    """Login por e-mail, com o Conecta ID na frente do `ModelBackend`.
+    """Login por e-mail, verificado no Conecta ID.
 
     Substituiu um `EmailOrUsernameTokenSerializer` que reescrevia e-mail →
-    username ANTES do `authenticate()`. Aquilo era inofensivo enquanto o login
-    era local, mas viraria uma falha silenciosa assim que o Conecta ID entrasse:
-    o serviço identifica a pessoa por e-mail (`por_email` filtra um EmailField),
-    então um username nunca casa lá — o `BackendIdentidade` devolveria None
-    sempre, o `ModelBackend` logo atrás aceitaria a senha local e o login central
-    nunca engataria. Ninguém veria erro nenhum; simplesmente não estaria valendo.
+    username ANTES do `authenticate()`. Com o login local aquilo funcionava; com
+    o login central, nao: o servico identifica a pessoa por e-mail (`por_email`
+    filtra um EmailField), entao um username nunca casa la. O
+    `BackendIdentidade` devolveria `None` para toda conta que ja existisse aqui,
+    o `ModelBackend` logo atras aceitaria a senha local, e o login central nao
+    valeria para ninguem — sem erro nenhum aparecendo.
 
-    A tradução continua existindo, mas na ORDEM inversa e aqui dentro: manda-se
-    o e-mail primeiro (chance do Conecta ID) e o username depois (chance do
-    `ModelBackend`, que é como o superusuário do /admin/ e quem ainda não migrou
-    continuam entrando).
+    Desde 04/08/2026 nao ha mais para onde cair: o `ModelBackend` saiu da cadeia
+    junto com as senhas locais. Uma tentativa, um backend, um caminho.
     """
 
     def __init__(self, *args, **kwargs):
@@ -54,24 +52,19 @@ class LoginPorEmailSerializer(TokenObtainPairSerializer):
         email = attrs["email"].strip().lower()
         senha = attrs["password"]
 
-        self.user = None
-        for tentativa in self._identificadores(email):
-            # `BloqueadoTemporariamente` e `IdentidadeIndisponivel` sobem daqui
-            # de propósito: a view as traduz em 429 e 503. Seguir para a
-            # tentativa seguinte quando o Conecta ID está fora faria a pessoa
-            # entrar pela senha local antiga, desfazendo o corte em silêncio
-            # toda vez que o serviço oscilasse.
-            self.user = authenticate(
-                request=self.context.get("request"), username=tentativa, password=senha
-            )
-            if self.user is not None:
-                break
+        # Uma tentativa, um backend. O laco que existia aqui — e-mail primeiro,
+        # username depois — servia para alcancar o `ModelBackend`, e ele saiu
+        # junto com as senhas locais. `BloqueadoTemporariamente` e
+        # `IdentidadeIndisponivel` sobem daqui de proposito: a view as traduz em
+        # 429 e 503, e servico fora do ar nao pode parecer senha errada.
+        self.user = authenticate(
+            request=self.context.get("request"), username=email, password=senha
+        )
 
         if not api_settings.USER_AUTHENTICATION_RULE(self.user):
             raise AuthenticationFailed(
                 self.error_messages["no_active_account"], "no_active_account"
             )
-        self._recusar_senha_local_de_quem_ja_migrou(self.user)
 
         # O par de tokens é montado aqui, e não com `super().validate()`, porque
         # o `validate` do pai refaz o `authenticate()` — com o campo `username`,
@@ -82,54 +75,6 @@ class LoginPorEmailSerializer(TokenObtainPairSerializer):
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(None, self.user)
         return dados
-
-    @staticmethod
-    def _identificadores(email):
-        """O que mandar para o `authenticate()`, em ordem: e-mail, depois username.
-
-        A pessoa digita só o e-mail — mas os dois backends procuram por chaves
-        diferentes, e o `authenticate()` do Django percorre a cadeia inteira com
-        o MESMO valor. Uma chamada só atenderia um dos dois e cegaria o outro.
-
-        A ordem é de segurança: o login central sempre tem a primeira chance.
-        """
-        email = (email or "").strip().lower()
-        if not email:
-            return []
-
-        conta = User.objects.filter(email__iexact=email).first()
-        username = conta.get_username() if conta else None
-
-        # `dict.fromkeys` preserva a ordem e remove o repetido do caso em que
-        # username e e-mail coincidem.
-        return list(dict.fromkeys(valor for valor in (email, username) if valor))
-
-    @staticmethod
-    def _recusar_senha_local_de_quem_ja_migrou(usuario):
-        """Quem tem vínculo com o Conecta ID entra SÓ pelo Conecta ID.
-
-        Sem isto, revogar o acesso de alguém lá não revoga nada: o serviço
-        responde `sem_acesso_ao_app`, o `BackendIdentidade` devolve None, e o
-        `ModelBackend` aceita a senha local antiga. A gestão central de acesso
-        viraria enfeite — e do tipo que só se descobre no dia em que alguém
-        desligado continua entrando.
-
-        O recorte é por VÍNCULO: quem ainda não migrou segue entrando pela senha
-        local, que é a rede de segurança da transição. Some no expurgo, junto
-        com o `ModelBackend`.
-        """
-        from identidade_client import central_ativa
-
-        if not central_ativa():
-            return
-        if getattr(usuario, "vinculo_identidade", None) is None:
-            return
-        # `authenticate()` carimba em `user.backend` quem aceitou a credencial.
-        if not str(getattr(usuario, "backend", "")).endswith("BackendIdentidade"):
-            raise AuthenticationFailed(
-                LoginPorEmailSerializer.default_error_messages["no_active_account"],
-                "no_active_account",
-            )
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
