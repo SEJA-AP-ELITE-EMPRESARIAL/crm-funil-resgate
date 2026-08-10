@@ -16,7 +16,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # Mesma série do backend/Dockerfile. Se as duas divergirem, o CI passa
+          # a atestar um Python que produção não roda — foi essa divergência
+          # (venv em 3.13, produção em 3.12) que deixou o Django sem suporte
+          # passar 16 meses despercebido.
+          python-version: "3.14"
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Instalar dependências
