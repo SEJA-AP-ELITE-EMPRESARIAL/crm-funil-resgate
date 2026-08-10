@@ -1,7 +1,7 @@
 # Frontend React do CRM — build com Node, serve com nginx.
 FROM node:24-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 COPY . .
 # Sem VITE_API_URL: em produção o front chama /api relativo (mesma origem),
