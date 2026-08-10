@@ -11,6 +11,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 import os
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -197,6 +198,16 @@ if not DEBUG:
     # Render/Cloudflare terminam o TLS e encaminham este header.
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SECURE_SSL_REDIRECT = _env_bool("SECURE_SSL_REDIRECT", True)
+    # Rodando `manage.py test`, o redirect fica desligado. O cliente de teste do
+    # Django fala HTTP puro e não passa pelo proxy, então TODA requisição viraria
+    # 301 e a suíte morreria inteira — 63 dos 74 testes, medido.
+    #
+    # Não é conveniência: sem esta linha, rodar a suíte contra a configuração de
+    # produção é impossível — e é durante um incidente, contra o banco de
+    # verdade, que se quer poder rodá-la. Mesmo tratamento que o Lobby_SejaAP e
+    # o conecta-kanban receberam.
+    if "test" in sys.argv:
+        SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30

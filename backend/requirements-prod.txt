@@ -2,8 +2,15 @@
 # Instale com:  pip install -r requirements-prod.txt
 -r requirements.txt
 
-# Driver Postgres (psycopg v3 — tem wheels para Windows/Python 3.13 e é
-# suportado nativamente pelo Django 5).
-psycopg[binary]==3.2.3
+# Driver Postgres (psycopg v3, suportado nativamente pelo Django).
+#
+# A versão importa: NÃO EXISTE wheel binário de `psycopg-binary` 3.2.3 para o
+# Python 3.14 — a primeira da série com cp314 é a 3.2.10. Sem wheel, o pip tenta
+# compilar, e a imagem não tem compilador nem libpq-dev: o BUILD FALHA.
+#
+# Ficamos na última da 3.2.x em vez de pular para a 3.3: é o menor passo que
+# destrava o 3.14, e num upgrade que existe para fechar exposição de segurança
+# não se troca o driver do banco de brinde.
+psycopg[binary]==3.2.13
 
 gunicorn==23.0.0
