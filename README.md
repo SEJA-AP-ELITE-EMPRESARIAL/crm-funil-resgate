@@ -53,6 +53,16 @@ Superusuário do admin: `python manage.py createsuperuser` (admin em `/admin/`).
 
 ### 2) Frontend (porta 5173)
 
+> **Node 24.19.0 LTS.** A versão está fixada em `frontend/.nvmrc` e cobrada pelo
+> `engines` do `package.json`. Com `nvm` ou `fnm`, um `nvm use` na pasta resolve.
+>
+> **Scripts de instalação de dependências não rodam.** O `.npmrc` liga
+> `strict-allow-scripts`, e a decisão por pacote vive no campo `allowScripts` do
+> `package.json` (`false` = negado). Se o `npm install` ou o `npm ci` falhar com
+> `ESTRICTALLOWSCRIPTS`, é uma dependência nova trazendo script de instalação:
+> veja o que ela faz nesse script e acrescente à lista, usando `false` por padrão.
+> O erro é proposital: é preferível a rodar código de terceiro sem ninguém olhar.
+
 ```bash
 cd frontend
 npm install
