@@ -75,7 +75,7 @@ api.interceptors.response.use(
         refreshing = null;
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
-      } catch (e) {
+      } catch {
         refreshing = null;
         clearTokens();
         window.dispatchEvent(new CustomEvent("crm-token-expired"));
