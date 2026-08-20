@@ -79,8 +79,36 @@ chamada que o Kanban usa para montar o board.
         "rotulo": "🟡 Priorizado", "total_clientes": 210 }, ... ] },
   { "id": 3, "nome": "Resgate", "slug": "resgate", "etapas": [] } ] }
 ```
-Um funil pode legitimamente ter **zero** colunas (é o estado inicial de Base Elite
-e Resgate).
+Um funil pode legitimamente ter **zero** colunas — é o estado de todo funil
+recém-criado, e o board convida a criar a primeira.
+
+Parâmetro `ativo`: por padrão só os ativos (`ativo=1`). `ativo=0` traz só os
+desativados e `ativo=todos` traz os dois — é o que a tela de gestão usa para
+enxergar o que saiu do seletor.
+
+### `POST /api/crm/funis/` — criar funil
+Desde 2026-08-20 o funil se cria pela API e pela interface, e não só pelo /admin
+(TSK-146). Só `nome` é obrigatório; `slug` é derivado dele (único no quadro, com
+sufixo em caso de colisão) e `ordem` cai no fim do seletor quando omitida.
+```json
+{ "nome": "Indicações Contábeis", "cor": "#3D7EC5",
+  "descricao": "Parceria com escritórios" }
+```
+`400` se já existir funil com esse nome (comparação **sem** diferenciar
+maiúsculas) ou se a cor não começar com `#`. O funil nasce **sem colunas**: crie-as
+em seguida por `POST /api/crm/etapas/`.
+
+### `PATCH /api/crm/funis/{id}/` — renomear / recolorir / desativar
+O **`slug` não muda** ao renomear, mesma regra da coluna. `{"ativo": false}` tira
+o funil do seletor preservando clientes, colunas e histórico — é o caminho normal
+para aposentar um funil.
+
+### `DELETE /api/crm/funis/{id}/`
+`204` se o funil não tiver cliente nenhum; as **colunas caem junto** (coluna só
+existe dentro de um funil). **`409`** se tiver clientes:
+```json
+{ "erro": "O funil 'Indicados APN' tem 235 cliente(s). Mova-os para outro funil antes de excluí-lo, ou desative o funil para tirá-lo do seletor sem perder o histórico." }
+```
 
 ## Etapas (colunas do Kanban)
 

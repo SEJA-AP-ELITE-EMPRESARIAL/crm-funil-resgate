@@ -29,6 +29,22 @@ import { useClientesData } from "@/contexts/ClientesContext";
 // barra de rolagem horizontal fique sempre visível sem precisar descer a página.
 const BOARD_HEIGHT = { xs: "auto", md: "calc(100vh - 210px)" };
 
+// Moldura dos estados vazios do board (sem funil / funil sem colunas).
+const VAZIO_SX = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 2,
+  py: 10,
+  px: 3,
+  textAlign: "center",
+  borderRadius: 3,
+  border: "2px dashed",
+  borderColor: "divider",
+  bgcolor: (t) => alpha(t.palette.background.paper, 0.4),
+};
+
 export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
   const {
     clientesDoFunil: clientes,
@@ -130,6 +146,25 @@ export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
     );
   }
 
+  // Alcançável desde que funis passaram a ser desativáveis/excluíveis pela tela:
+  // sem funil não há board, e "Nova coluna" não teria a que funil pertencer.
+  if (!funilAtivo) {
+    return (
+      <Box sx={VAZIO_SX}>
+        <ViewColumnRoundedIcon sx={{ fontSize: 44, color: "text.disabled" }} />
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Nenhum funil ativo
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5, maxWidth: 460 }}>
+            Todos os funis foram desativados ou excluídos. Use <b>Novo funil</b>, no seletor
+            acima, para criar um — ou reative o antigo pelo admin.
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
+
   const botaoNovaColuna = (
     <Button
       onClick={() => setColunaForm({ aberto: true, etapa: null })}
@@ -144,26 +179,11 @@ export function KanbanBoard({ filterConsultor, filterMotivo, search }) {
   return (
     <>
       {etapas.length === 0 ? (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 2,
-            py: 10,
-            px: 3,
-            textAlign: "center",
-            borderRadius: 3,
-            border: "2px dashed",
-            borderColor: "divider",
-            bgcolor: (t) => alpha(t.palette.background.paper, 0.4),
-          }}
-        >
+        <Box sx={VAZIO_SX}>
           <ViewColumnRoundedIcon sx={{ fontSize: 44, color: "text.disabled" }} />
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              {funilAtivo?.nome} ainda não tem colunas
+              {funilAtivo.nome} ainda não tem colunas
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5, maxWidth: 460 }}>
               Cada funil tem o próprio fluxo. Crie as colunas que fazem sentido para este —

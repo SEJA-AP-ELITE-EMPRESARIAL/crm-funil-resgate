@@ -87,7 +87,8 @@ crm-funil-resgate/
         ├── lib/stages.js        # helpers das etapas (a lista vem da API)
         ├── pages/               # Login, Funil (header + tabs)
         └── components/funil/    # KanbanBoard, StageColumn, ClienteCard,
-                                 # ClienteFormDialog, EtapaFormDialog, Dashboard
+                                 # ClienteFormDialog, EtapaFormDialog,
+                                 # FunilFormDialog, Dashboard
 ```
 
 ## API (resumo)
@@ -98,7 +99,8 @@ crm-funil-resgate/
 | POST | `/api/token/refresh/` | Renova o access token |
 | GET | `/api/crm/me/` | Usuário logado |
 | GET | `/api/crm/config/` | Taxa de comissão e meses padrão |
-| GET | `/api/crm/funis/` | Funis ativos, **com as colunas de cada um** |
+| GET/POST | `/api/crm/funis/` | Funis ativos, **com as colunas de cada um** / cria |
+| GET/PATCH/DELETE | `/api/crm/funis/{id}/` | Detalha / renomeia, recolore, desativa / remove (409 se tiver clientes) |
 | GET/POST | `/api/crm/etapas/` | Colunas do Kanban (por funil) / cria |
 | PATCH/DELETE | `/api/crm/etapas/{id}/` | Renomeia, recolore / remove (409 se tiver clientes) |
 | POST | `/api/crm/etapas/reordenar/` | Aplica a nova ordem das colunas |
@@ -125,7 +127,7 @@ e aplicações) em [`docs/11-api-guia-completo.md`](docs/11-api-guia-completo.md
 ## Testes
 
 ```bash
-cd backend && python manage.py test apps.crm     # 51 testes
+cd backend && python manage.py test apps.crm     # 96 testes
 cd frontend && npm run build                       # valida a compilação
 ```
 

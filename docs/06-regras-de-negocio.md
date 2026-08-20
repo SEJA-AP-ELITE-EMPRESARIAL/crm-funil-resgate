@@ -2,10 +2,18 @@
 
 ## Funis
 
-Sistema multi-funil. Os funis são registros em `crm_funil` (gerenciáveis pelo admin).
-Hoje: **Indicados APN**, **Base Elite**, **Resgate**. Um seletor global escolhe **um**
+Sistema multi-funil. Os funis são registros em `crm_funil`, criados e mantidos pela
+própria interface (o admin continua servindo para curadoria). Vieram do MVP:
+**Indicados APN**, **Base Elite**, **Resgate**. Um seletor global escolhe **um**
 funil — não existe visão "todos", porque cada funil tem as próprias colunas e
 misturá-las num board só não significaria nada.
+
+Aposentar um funil tem dois caminhos, e a diferença é deliberada:
+
+- **desativar** tira do seletor e preserva clientes, colunas e histórico — é o
+  caminho normal;
+- **excluir** só é aceito se o funil não tiver cliente nenhum (`409` caso tenha), e
+  leva as colunas junto, porque coluna só existe dentro de um funil.
 
 ## Etapas (colunas) — por funil
 

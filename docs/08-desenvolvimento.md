@@ -44,7 +44,7 @@ Abra **http://localhost:5173**. Em dev o Vite faz proxy de `/api` para o backend
 ## Rodar os testes
 
 ```bash
-# Backend (10 testes)
+# Backend (96 testes)
 cd backend && python manage.py test apps.crm
 
 # Frontend (valida a compilação)

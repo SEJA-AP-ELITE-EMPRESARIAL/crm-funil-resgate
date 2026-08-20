@@ -18,9 +18,11 @@ do ConectaAP** para virar a primeira versão do Conecta_CRM, com backend própri
 - **Gestão:** acompanha o Dashboard (conversão por etapa, prioridade, motivos).
 - **Admin:** gerencia funis e a base pelo Django Admin.
 
-## Os 3 funis
+## Os funis
 
-O sistema é **multi-funil**. Hoje há três (gerenciáveis pelo admin):
+O sistema é **multi-funil**. Os funis são criados, renomeados e desativados
+pela própria interface (seletor de funil → **Novo funil**), sem passar pelo admin
+e sem migration. Os três que vieram do MVP:
 
 | Funil | Uso |
 |-------|-----|

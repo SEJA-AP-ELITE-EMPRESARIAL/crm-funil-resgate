@@ -11,11 +11,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import {
   atualizarCliente,
   atualizarEtapa,
+  atualizarFunil,
   criarEtapa,
+  criarFunil,
   listarClientes,
   listarFunis,
   obterConfig,
   removerEtapa,
+  removerFunil,
   reordenarEtapas,
 } from "@/features/funil/services/clientesService";
 
@@ -87,6 +90,55 @@ export function ClientesProvider({ children }) {
     }
   }, []);
 
+  /* === Gestão de funis ===
+   *
+   * `funis` é a lista dos ATIVOS (é o que a API devolve por padrão), então
+   * desativar e excluir têm o mesmo efeito aqui: o funil sai do seletor. A
+   * troca de seleção é feita na hora, e não por efeito, para o board nunca
+   * ficar apontando para um funil que já saiu da lista.
+   */
+
+  const trocarSelecaoSeNecessario = useCallback(
+    (proximos) => {
+      if (!proximos.some((f) => f.slug === funilSel)) setFunilSel(proximos[0]?.slug ?? null);
+    },
+    [funilSel],
+  );
+
+  const novoFunil = useCallback(async (dados) => {
+    const criado = await criarFunil(dados);
+    setFunis((fs) => [...fs, criado]);
+    // Entra no funil recém-criado: ele nasce sem colunas, e o board já convida
+    // a criar a primeira.
+    setFunilSel(criado.slug);
+    return criado;
+  }, []);
+
+  const editarFunil = useCallback(
+    async (id, patch) => {
+      const atualizado = await atualizarFunil(id, patch);
+      const proximos = atualizado.ativo
+        ? funis.map((f) => (f.id === id ? atualizado : f))
+        : funis.filter((f) => f.id !== id);
+      setFunis(proximos);
+      trocarSelecaoSeNecessario(proximos);
+      return atualizado;
+    },
+    [funis, trocarSelecaoSeNecessario],
+  );
+
+  const excluirFunil = useCallback(
+    async (id) => {
+      await removerFunil(id);
+      const proximos = funis.filter((f) => f.id !== id);
+      setFunis(proximos);
+      trocarSelecaoSeNecessario(proximos);
+      // Não há cliente a limpar no estado local: o backend recusa (409) excluir
+      // funil que ainda tenha algum.
+    },
+    [funis, trocarSelecaoSeNecessario],
+  );
+
   /* === Gestão de colunas === */
 
   const novaEtapa = useCallback(
@@ -150,6 +202,9 @@ export function ClientesProvider({ children }) {
       config,
       reload,
       moverEtapa,
+      novoFunil,
+      editarFunil,
+      excluirFunil,
       novaEtapa,
       editarEtapa,
       excluirEtapa,
@@ -157,7 +212,8 @@ export function ClientesProvider({ children }) {
     }),
     [
       clientes, clientesDoFunil, funis, funilSel, funilAtivo, etapas, loading, config,
-      reload, moverEtapa, novaEtapa, editarEtapa, excluirEtapa, moverColuna,
+      reload, moverEtapa, novoFunil, editarFunil, excluirFunil,
+      novaEtapa, editarEtapa, excluirEtapa, moverColuna,
     ],
   );
 

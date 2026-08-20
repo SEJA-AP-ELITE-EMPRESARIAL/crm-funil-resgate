@@ -31,9 +31,25 @@ export async function obterConfig() {
   return data;
 }
 
+/* === Funis (quadros). Cada um tem as próprias colunas. === */
+
 export async function listarFunis() {
   const { data } = await api.get(`${BASE}/funis/`);
   return data.results ?? [];
+}
+
+export async function criarFunil(payload) {
+  const { data } = await api.post(`${BASE}/funis/`, payload);
+  return data;
+}
+
+export async function atualizarFunil(id, patch) {
+  const { data } = await api.patch(`${BASE}/funis/${id}/`, patch);
+  return data;
+}
+
+export async function removerFunil(id) {
+  await api.delete(`${BASE}/funis/${id}/`);
 }
 
 /* === Colunas do Kanban (etapas). Pertencem a um funil. === */

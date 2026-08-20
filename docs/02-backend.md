@@ -12,15 +12,16 @@ apps/crm/
 │   └── api_key.py       # ApiKey + EscopoApiKey (integração externa)
 ├── serializers/
 │   ├── cliente.py       # ClienteSerializer (read) + ClienteWriteSerializer
-│   └── funil.py         # FunilSerializer
+│   └── funil.py         # FunilSerializer (read) + FunilWriteSerializer
 ├── services/
 │   ├── cliente_service.py   # criar/atualizar/remover (transações)
 │   ├── etapa_service.py     # colunas: criar/editar/excluir/reordenar
+│   ├── funil_service.py     # funis: criar/editar/excluir
 │   └── importacao.py        # importação de Excel (openpyxl)
 ├── views/
 │   ├── _helpers.py      # clientes_base() — base compartilhada
 │   ├── cliente_views.py # CRUD de clientes
-│   ├── funil_views.py   # lista de funis (+ etapas embutidas)
+│   ├── funil_views.py   # CRUD dos funis (+ etapas embutidas)
 │   ├── etapa_views.py   # CRUD das colunas do Kanban
 │   ├── auth_views.py    # login (e-mail/username), /me, /config
 │   └── import_views.py  # importar + modelo .xlsx
@@ -30,9 +31,11 @@ apps/crm/
 │   └── criar_api_key.py     # emite chave de API pela CLI
 ├── migrations/
 ├── tests/
-│   ├── test_api.py      # 10 testes
-│   ├── test_api_key.py  # 19 testes (integração externa)
-│   └── test_etapas.py   # 22 testes (colunas por funil + migração de dados)
+│   ├── test_api.py           # 11 testes
+│   ├── test_api_key.py       # 19 testes (integração externa)
+│   ├── test_etapas.py        # 21 testes (colunas por funil + migração de dados)
+│   ├── test_funis.py         # 22 testes (CRUD de funis)
+│   └── test_login_central.py # 23 testes (Conecta ID)
 ├── authentication.py    # ApiKeyAuthentication
 ├── permissions.py       # HasApiScope (leitura × escrita)
 ├── throttling.py        # ApiKeyRateThrottle (cota por chave)
@@ -48,7 +51,9 @@ negócio em `services/`, leitura/escrita em serializers separados.
 
 ### `Funil` (`models/funil.py`)
 
-Tabela gerenciável pelo admin — permite criar/renomear/desativar funis sem migration.
+Tabela gerenciável pela interface e pelo admin — permite criar/renomear/desativar
+funis sem migration. `slug` e `ordem` são derivados do nome quando não informados,
+mesma mecânica de `Etapa`.
 
 | Campo | Tipo | Observação |
 |-------|------|-----------|
@@ -196,7 +201,7 @@ Lista aceita filtro opcional `?funil=<id|slug>`. Detalhe/alteração/remoção e
 
 ## Testes
 
-`python manage.py test apps.crm` — 51 testes.
+`python manage.py test apps.crm` — 96 testes.
 
 - **`test_api.py`** (10): exigência de auth, base compartilhada, `criado_por` na
   criação, comissão parametrizada por `meses_contrato`, padrão de meses, `nome`

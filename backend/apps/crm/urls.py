@@ -11,8 +11,9 @@ urlpatterns = [
     # Senha (só no modo central — ver apps/crm/identidade_senha.py)
     path("senha/", auth_views.trocar_senha, name="trocar_senha"),
     path("senha/definir/", auth_views.definir_senha, name="definir_senha"),
-    # Funis
-    path("funis/", funil_views.funil_list, name="funil_list"),
+    # Funis (quadros)
+    path("funis/", funil_views.funil_root, name="funil_root"),
+    path("funis/<int:funil_id>/", funil_views.funil_item, name="funil_item"),
     # Etapas (colunas do Kanban)
     path("etapas/", etapa_views.etapa_root, name="etapa_root"),
     path("etapas/reordenar/", etapa_views.etapa_reordenar, name="etapa_reordenar"),
