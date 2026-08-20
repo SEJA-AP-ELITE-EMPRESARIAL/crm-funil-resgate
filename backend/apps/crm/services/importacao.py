@@ -111,16 +111,23 @@ def _parse_int(v):
         raise ValueError(f"número inválido: {v!r}")
 
 
-def _mapa_etapas_do_funil(funil, _cache={}):
+def _mapa_etapas_do_funil(funil, cache):
     """{nome ou slug normalizado -> Etapa} do funil. As colunas são por funil,
-    então o mapa precisa ser resolvido depois de saber o funil da linha."""
-    if funil.id not in _cache:
+    então o mapa precisa ser resolvido depois de saber o funil da linha.
+
+    O `cache` é criado a cada importação e morre com ela. Era um default mutável
+    no módulo, o que o fazia viver pelo processo inteiro do gunicorn: coluna (ou
+    funil) criado pela interface depois da primeira importação daquele funil
+    ficava invisível para a importação até o worker reiniciar, e a mensagem de
+    erro ainda listava as colunas velhas como "disponíveis".
+    """
+    if funil.id not in cache:
         m = {}
         for e in Etapa.objects.filter(funil=funil):
             m[_norm(e.slug)] = e
             m[_norm(e.nome)] = e
-        _cache[funil.id] = m
-    return _cache[funil.id]
+        cache[funil.id] = m
+    return cache[funil.id]
 
 
 def _mapa_funis():
@@ -169,6 +176,7 @@ def importar_clientes(arquivo, usuario=None) -> dict:
         raise ValueError("A planilha precisa ter uma coluna 'Nome / Empresa'.")
 
     funis = _mapa_funis()
+    etapas_por_funil = {}  # resolvido sob demanda, vive só nesta importação
 
     criados = 0
     erros = []
@@ -221,7 +229,7 @@ def importar_clientes(arquivo, usuario=None) -> dict:
                     "erro": f"coluna '{coluna_etapa}': informe o funil para poder definir a etapa",
                 })
                 continue
-            etapa = _mapa_etapas_do_funil(funil).get(_norm(etapa_bruta))
+            etapa = _mapa_etapas_do_funil(funil, etapas_por_funil).get(_norm(etapa_bruta))
             if etapa is None:
                 disponiveis = ", ".join(
                     Etapa.objects.filter(funil=funil).values_list("nome", flat=True)

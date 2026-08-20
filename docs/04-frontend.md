@@ -27,6 +27,7 @@ src/
 │       ├── ClienteFormDialog.jsx# criar/editar/excluir (form adapta ao funil)
 │       ├── ImportarDialog.jsx   # importação de Excel
 │       ├── EtapaFormDialog.jsx  # criar/editar coluna do Kanban
+│       ├── FunilFormDialog.jsx  # criar/editar/desativar/excluir funil
 │       └── Dashboard.jsx        # KPIs, funil, rankings, motivos (Recharts)
 ├── pages/
 │   ├── Login.jsx
@@ -51,6 +52,10 @@ Sem Redux/React Query — **Context API** (padrão ConectaAP):
   Kanban e Dashboard. Expõe:
   - `clientes` (toda a base) e `clientesDoFunil` (filtrado pelo funil selecionado);
   - `funis`, `funilSel`, `setFunilSel` (seletor global);
+  - `novoFunil()`, `editarFunil()`, `excluirFunil()` — desativar ou excluir tira o
+    funil da lista e a seleção salta para o primeiro que sobrou, na hora (não por
+    efeito), para o board nunca apontar para um funil que já saiu;
+  - `novaEtapa()`, `editarEtapa()`, `excluirEtapa()`, `moverColuna()` (colunas);
   - `reload()`, `moverEtapa(id, etapa)` (arraste otimista com rollback);
   - `config` (taxa de comissão, meses padrão).
 
@@ -66,20 +71,29 @@ Sem Redux/React Query — **Context API** (padrão ConectaAP):
   falhar, limpa os tokens e dispara `crm-token-expired`.
 
 `clientesService.js` encapsula os endpoints (`listarClientes`, `criarCliente`,
-`atualizarCliente`, `removerCliente`, `listarFunis`, `obterConfig`,
-`importarClientes`, `baixarModeloImportacao`).
+`atualizarCliente`, `removerCliente`, `listarFunis`, `criarFunil`,
+`atualizarFunil`, `removerFunil`, `criarEtapa`, `atualizarEtapa`, `removerEtapa`,
+`reordenarEtapas`, `obterConfig`, `importarClientes`, `baixarModeloImportacao`).
 
 ## Telas
 
 ### Funil (`pages/Funil.jsx`)
-Header preto com logo + contadores; **seletor global de funil** (Todos / Indicados
-APN / Base Elite / Resgate); botões "Importar" e "Novo cliente"; três abas:
+Header preto com logo + contadores; **seletor global de funil** (um item por funil
+ativo, mais **Novo funil** no fim da lista, e o lápis ao lado para editar o funil
+selecionado); botões "Importar" e "Novo cliente"; duas abas:
 
 - **Kanban** — `KanbanBoard` + filtros (busca, consultor, motivo).
 - **Dashboard** — `Dashboard`.
 
 O seletor de funil **não tem mais a opção "Todos"**: cada funil tem as próprias
 colunas, e a aba Comissionamento foi removida em 2026-07-27.
+
+### Funil novo (`FunilFormDialog`)
+**Novo funil** no seletor abre o formulário (nome, cor, descrição) e, ao salvar,
+já entra no funil criado — que nasce **sem colunas** e cai direto no convite do
+board para criar a primeira. Editando um funil existente, o mesmo diálogo oferece
+**Desativar** (tira do seletor, preserva tudo) e **Excluir** (só funil sem cliente;
+a confirmação diz quantas colunas caem junto).
 
 ### Kanban
 `@dnd-kit`: colunas (`StageColumn`) por etapa, cartões (`ClienteCard`) arrastáveis.

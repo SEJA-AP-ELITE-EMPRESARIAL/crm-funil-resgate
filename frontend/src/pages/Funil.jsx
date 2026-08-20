@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
+import EditRoundedIcon from "@mui/icons-material/EditRounded";
 import FilterAltRoundedIcon from "@mui/icons-material/FilterAltRounded";
 import LockResetRoundedIcon from "@mui/icons-material/LockResetRounded";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
@@ -13,6 +14,7 @@ import {
   Button,
   Chip,
   Divider,
+  IconButton,
   InputAdornment,
   MenuItem,
   Stack,
@@ -28,12 +30,16 @@ import { Link as RotaLink } from "react-router-dom";
 import logoSejaAp from "@/assets/logo-sejaap.png";
 import { Dashboard } from "@/components/funil/Dashboard";
 import { ClienteFormDialog } from "@/components/funil/ClienteFormDialog";
+import { FunilFormDialog } from "@/components/funil/FunilFormDialog";
 import { ImportarDialog } from "@/components/funil/ImportarDialog";
 import { KanbanBoard } from "@/components/funil/KanbanBoard";
 import { useAuth } from "@/contexts/AuthContext";
 import { ClientesProvider, useClientesData } from "@/contexts/ClientesContext";
 
 const MAX_W = 1600;
+
+// Valor sentinela do seletor: abre o formulário em vez de trocar de funil.
+const NOVO_FUNIL = "__novo__";
 
 function FunilInner() {
   const { user, logout } = useAuth();
@@ -45,6 +51,16 @@ function FunilInner() {
   const [motivo, setMotivo] = useState("all");
   const [criando, setCriando] = useState(false);
   const [importando, setImportando] = useState(false);
+  const [funilForm, setFunilForm] = useState(null); // {aberto, funil}
+
+  function trocarFunil(e) {
+    const valor = e.target.value;
+    if (valor === NOVO_FUNIL) {
+      setFunilForm({ aberto: true, funil: null });
+      return;
+    }
+    setFunilSel(valor);
+  }
 
   const consultores = useMemo(() => {
     const s = new Set();
@@ -127,11 +143,14 @@ function FunilInner() {
             >
               Novo cliente
             </Button>
+            {/* A descrição vem do funil selecionado: com funis criados pela
+                própria equipe, um rótulo fixo mentiria em todos menos um. */}
             <Chip
               size="small"
-              label="Win-back"
+              label={funilAtivo?.descricao || funilAtivo?.nome || "—"}
               sx={{
-                display: { xs: "none", sm: "flex" },
+                display: { xs: "none", sm: funilAtivo ? "flex" : "none" },
+                maxWidth: 220,
                 bgcolor: (t) => alpha(t.palette.primary.main, 0.08),
                 color: "primary.main",
                 border: (t) => `1px solid ${alpha(t.palette.primary.main, 0.3)}`,
@@ -183,6 +202,11 @@ function FunilInner() {
 
       <ClienteFormDialog open={criando} onClose={() => setCriando(false)} />
       <ImportarDialog open={importando} onClose={() => setImportando(false)} />
+      <FunilFormDialog
+        open={!!funilForm?.aberto}
+        funil={funilForm?.funil}
+        onClose={() => setFunilForm(null)}
+      />
 
       {/* Conteúdo */}
       <Box component="main" sx={{ maxWidth: MAX_W, mx: "auto", px: 3, py: 3 }}>
@@ -194,28 +218,51 @@ function FunilInner() {
           sx={{ mb: 3 }}
         >
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
-            <TextField
-              select
-              value={funilSel}
-              onChange={(e) => setFunilSel(e.target.value)}
-              sx={{ minWidth: 210 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <FilterAltRoundedIcon fontSize="small" sx={{ color: "primary.main" }} />
-                  </InputAdornment>
-                ),
-              }}
-            >
-              {funis.map((f) => (
-                <MenuItem key={f.slug} value={f.slug}>
-                  <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: f.cor }} />
-                    {f.nome}
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <TextField
+                select
+                value={funilSel ?? ""}
+                onChange={trocarFunil}
+                sx={{ minWidth: 210 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <FilterAltRoundedIcon fontSize="small" sx={{ color: "primary.main" }} />
+                    </InputAdornment>
+                  ),
+                }}
+              >
+                {funis.map((f) => (
+                  <MenuItem key={f.slug} value={f.slug}>
+                    <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: f.cor }} />
+                      {f.nome}
+                    </Box>
+                  </MenuItem>
+                ))}
+                <Divider sx={{ my: 0.5 }} />
+                <MenuItem value={NOVO_FUNIL}>
+                  <Box
+                    component="span"
+                    sx={{ display: "inline-flex", alignItems: "center", gap: 1, color: "primary.main" }}
+                  >
+                    <AddRoundedIcon fontSize="small" />
+                    Novo funil
                   </Box>
                 </MenuItem>
-              ))}
-            </TextField>
+              </TextField>
+              <Tooltip title="Editar funil">
+                <span>
+                  <IconButton
+                    onClick={() => setFunilForm({ aberto: true, funil: funilAtivo })}
+                    disabled={!funilAtivo}
+                    size="small"
+                  >
+                    <EditRoundedIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
             <Tabs
               value={tab}
               onChange={(_e, v) => setTab(v)}

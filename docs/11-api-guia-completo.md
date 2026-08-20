@@ -44,6 +44,7 @@ outros sistemas (ConectaAP), planilhas, BI e scripts internos.
 | Remover um registro | `DELETE /api/crm/clientes/{id}/` | escrita |
 | Importar uma planilha inteira | `POST /api/crm/clientes/importar/` | escrita |
 | Descobrir os funis **e suas colunas** | `GET /api/crm/funis/` | leitura |
+| Criar ou aposentar um funil | `POST/PATCH/DELETE /api/crm/funis/` | escrita |
 | Gerenciar colunas do Kanban | `GET/POST/PATCH/DELETE /api/crm/etapas/` | leitura / escrita |
 | Descobrir a taxa de comissão | `GET /api/crm/config/` | público |
 | Conferir se a credencial funciona | `GET /api/crm/me/` | leitura |
@@ -211,10 +212,27 @@ Não exige autenticação. Só regra de negócio global:
   { "id": 3, "nome": "Resgate", "slug": "resgate", "etapas": [] } ] }
 ```
 
-Só funis **ativos**. **É a chamada que resolve as colunas** — leia daqui em vez de
-fixar nomes de etapa no código.
+Só funis **ativos** por padrão. **É a chamada que resolve as colunas** — leia daqui
+em vez de fixar nomes de etapa no código. `?ativo=todos` inclui os desativados e
+`?ativo=0` traz só eles.
 
-### 6.6.1 Colunas do Kanban — `/api/crm/etapas/`
+### 6.6.1 Funis — `/api/crm/funis/`
+
+Desde 20/08/2026 o funil também se cria pela API (antes, só pelo /admin).
+
+| Método | Rota | Nota |
+|---|---|---|
+| GET | `/api/crm/funis/?ativo=<1\|0\|todos>` | lista com as colunas embutidas |
+| GET | `/api/crm/funis/{id}/` | detalha um funil |
+| POST | `/api/crm/funis/` | cria; exige só `nome`. `slug` e `ordem` são derivados |
+| PATCH | `/api/crm/funis/{id}/` | renomeia, recolore, desativa — **o slug não muda** |
+| DELETE | `/api/crm/funis/{id}/` | `204` se não tiver cliente (leva as colunas junto); **`409`** se tiver |
+
+Para aposentar um funil sem perder nada, use `PATCH {"ativo": false}`: ele sai do
+seletor e da listagem padrão, e clientes, colunas e histórico continuam de pé.
+`DELETE` é para funil criado por engano.
+
+### 6.6.2 Colunas do Kanban — `/api/crm/etapas/`
 
 | Método | Rota | Nota |
 |---|---|---|
@@ -476,8 +494,9 @@ funil do cliente devolve **400**, com a lista dos disponíveis na mensagem.
 | 2 | `base_elite` | Base Elite |
 | 3 | `resgate` | Resgate |
 
-Funis são gerenciáveis pelo admin — novos podem existir. Consulte
-`GET /api/crm/funis/` em vez de fixar ids.
+Funis são gerenciáveis pela interface e pela API — novos podem existir, e os
+antigos podem ter sido desativados. Consulte `GET /api/crm/funis/` em vez de fixar
+ids.
 
 ### Prioridade
 `P1` (maior) a `P5`. É convenção, não validação — a API aceita qualquer texto até

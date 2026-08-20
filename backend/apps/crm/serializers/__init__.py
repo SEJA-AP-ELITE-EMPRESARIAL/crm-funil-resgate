@@ -1,6 +1,6 @@
 from .cliente import ClienteSerializer, ClienteWriteSerializer
 from .etapa import EtapaSerializer, EtapaWriteSerializer
-from .funil import FunilSerializer
+from .funil import FunilSerializer, FunilWriteSerializer
 
 __all__ = [
     "ClienteSerializer",
@@ -8,4 +8,5 @@ __all__ = [
     "EtapaSerializer",
     "EtapaWriteSerializer",
     "FunilSerializer",
+    "FunilWriteSerializer",
 ]
