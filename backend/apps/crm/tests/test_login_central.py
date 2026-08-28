@@ -285,6 +285,7 @@ class SenhaPeloConectaIdTest(BaseLogin):
 
     TROCAR = "/api/crm/senha/"
     DEFINIR = "/api/crm/senha/definir/"
+    ESQUECI = "/api/crm/senha/esqueci/"
 
     def setUp(self):
         super().setUp()
@@ -393,3 +394,44 @@ class SenhaPeloConectaIdTest(BaseLogin):
             format="json",
         )
         self.assertEqual(r.status_code, 503)
+
+    # --- pedir o link (esqueci minha senha) -------------------------------
+    @patch("identidade_client.ClienteIdentidade.esqueci_senha")
+    def test_esqueci_senha_e_publico_e_so_pede_o_link(self, pedir):
+        """Sem autenticar, e sem tocar em senha: só dispara o e-mail."""
+        hash_antes = User.objects.get(pk=self.ana.pk).password
+
+        r = self.client.post(self.ESQUECI, {"email": self.ana.email}, format="json")
+
+        self.assertEqual(r.status_code, 200, r.data)
+        pedir.assert_called_once_with(self.ana.email)
+        self.assertEqual(User.objects.get(pk=self.ana.pk).password, hash_antes)
+
+    @patch("identidade_client.ClienteIdentidade.esqueci_senha")
+    def test_endereco_desconhecido_responde_exatamente_igual(self, pedir):
+        """A rota é pública: diferença aqui entrega quem trabalha na empresa."""
+        conhecido = self.client.post(
+            self.ESQUECI, {"email": self.ana.email}, format="json"
+        )
+        estranho = self.client.post(
+            self.ESQUECI, {"email": "ninguem-desse-mundo@sejaap.com.br"}, format="json"
+        )
+
+        self.assertEqual(conhecido.status_code, estranho.status_code)
+        self.assertEqual(conhecido.data, estranho.data)
+
+    @patch("identidade_client.ClienteIdentidade.esqueci_senha")
+    def test_esqueci_senha_com_servico_fora_do_ar_vira_503(self, pedir):
+        pedir.side_effect = IdentidadeIndisponivel("fora do ar")
+        r = self.client.post(self.ESQUECI, {"email": self.ana.email}, format="json")
+        self.assertEqual(r.status_code, 503)
+
+    def test_o_crm_nao_redefine_mais_senha_sem_token(self):
+        """A rota que fazia isso saiu do ar no Conecta ID em 28/08/2026.
+
+        O método sumiu do cliente junto; este teste é a rede para o dia em que
+        alguém recopiar uma versão antiga do `identidade_client.py`.
+        """
+        from identidade_client import ClienteIdentidade
+
+        self.assertFalse(hasattr(ClienteIdentidade, "redefinir_sem_token"))

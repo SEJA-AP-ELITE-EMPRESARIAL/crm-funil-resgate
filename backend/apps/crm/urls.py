@@ -11,6 +11,7 @@ urlpatterns = [
     # Senha (só no modo central — ver apps/crm/identidade_senha.py)
     path("senha/", auth_views.trocar_senha, name="trocar_senha"),
     path("senha/definir/", auth_views.definir_senha, name="definir_senha"),
+    path("senha/esqueci/", auth_views.esqueci_senha, name="esqueci_senha"),
     # Funis (quadros)
     path("funis/", funil_views.funil_root, name="funil_root"),
     path("funis/<int:funil_id>/", funil_views.funil_item, name="funil_item"),

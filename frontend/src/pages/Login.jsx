@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { Link as RotaLink, useNavigate } from "react-router-dom";
 
 import logoSejaAp from "@/assets/logo-sejaap.png";
 import { useAuth } from "@/contexts/AuthContext";
@@ -107,7 +107,16 @@ export default function Login() {
             >
               {enviando ? <CircularProgress size={22} sx={{ color: "#1A1A18" }} /> : "Entrar"}
             </Button>
-            <Typography variant="caption" color="text.secondary" align="center" sx={{ pt: 1 }}>
+            <Typography
+              component={RotaLink}
+              to="/esqueci-senha"
+              variant="caption"
+              align="center"
+              sx={{ pt: 1, color: "text.secondary" }}
+            >
+              Esqueci minha senha
+            </Typography>
+            <Typography variant="caption" color="text.secondary" align="center">
               Cadastros são gerenciados pelo administrador.
             </Typography>
           </Box>
