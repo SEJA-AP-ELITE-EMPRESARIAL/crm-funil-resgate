@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { PrivateRoute } from "@/components/auth/PrivateRoute";
 import DefinirSenha from "@/pages/DefinirSenha";
+import EsqueciSenha from "@/pages/EsqueciSenha";
 import Funil from "@/pages/Funil";
 import Login from "@/pages/Login";
 import TrocarSenha from "@/pages/TrocarSenha";
@@ -12,6 +13,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       {/* Pública de propósito: é o caminho de quem não consegue entrar. */}
       <Route path="/definir-senha" element={<DefinirSenha />} />
+      <Route path="/esqueci-senha" element={<EsqueciSenha />} />
       <Route
         path="/trocar-senha"
         element={

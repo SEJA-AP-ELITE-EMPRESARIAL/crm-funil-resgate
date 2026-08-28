@@ -232,6 +232,56 @@ def definir_senha(request):
     return Response({"detail": "Senha definida. Você já pode entrar."})
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def esqueci_senha(request):
+    """POST /api/crm/senha/esqueci/ — pede o link de senha por e-mail.
+
+    A outra metade de `definir_senha`: aqui a pessoa pede o link, lá ela usa.
+    Até 28/08/2026 esta metade não existia no CRM — quem esquecia a senha
+    dependia de um administrador gerar o link pela tela do kanban e entregar
+    por WhatsApp.
+
+    **A resposta é a mesma para qualquer e-mail.** A rota é pública, e dizer
+    "não há conta com esse endereço" entregaria a um estranho a lista de quem
+    trabalha aqui, um palpite por vez. O Conecta ID já responde uniforme; o que
+    esta view precisa é não desfazer isso.
+
+    Sem throttle próprio: o teto de cinco pedidos por hora é do Conecta ID e é
+    contado por e-mail, valendo para todos os apps ao mesmo tempo. Um limite
+    por app aqui não somaria proteção — quem quisesse encher a caixa de alguém
+    trocaria de app — e faria uma pessoa legítima ser barrada pelo movimento
+    de outra.
+    """
+    from apps.crm import identidade_senha
+
+    if not identidade_senha.central_ativa():
+        return Response({"detail": "Recuperação de senha não está disponível."}, status=404)
+
+    email = (request.data.get("email") or "").strip()
+    if not email:
+        return Response({"detail": "Informe o seu e-mail."}, status=400)
+
+    try:
+        identidade_senha.pedir_link(email)
+    except identidade_senha.ErroIdentidade:
+        # Larga de propósito: nesta rota o serviço não devolve erro sobre a
+        # conta, então tudo que chega aqui é infraestrutura (serviço fora,
+        # chave do app recusada, rede). Nenhum desses casos deve virar uma
+        # resposta diferente por e-mail — só por estado do serviço.
+        return Response(
+            {"detail": "Não foi possível pedir o link agora. Tente em instantes."},
+            status=503,
+        )
+
+    return Response({
+        "detail": (
+            "Se houver uma conta com esse e-mail, o link para definir a senha "
+            "acabou de ser enviado. Ele vale 48 horas e serve uma vez só."
+        )
+    })
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def config(request):

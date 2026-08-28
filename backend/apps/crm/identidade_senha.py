@@ -8,16 +8,20 @@ continua valendo porque quem responde é o serviço central.
 
 O CRM nunca teve tela de senha nenhuma: quem esquecia a senha pedia a um admin,
 que trocava pelo `/admin/` do Django. Com a senha morando fora, isso deixa de
-funcionar — daí estes dois caminhos.
+funcionar — daí estes três caminhos.
 
 ## O que o CRM NÃO faz
 
-Gerar link de definição de senha. O serviço só devolve o token para aplicações
-com `pode_gerir_identidades`, e essa é só o kanban. Não é limitação acidental:
-emitir link para um e-mail qualquer é poder sobre a conta de outra pessoa, e ele
-mora num lugar só, de propósito. Quem precisa de link pede pela tela do kanban —
-o token que sai de lá vale aqui, porque `definir_senha_por_token` no serviço não
-olha qual app está chamando.
+Gerar link de definição de senha **e receber o token**. O serviço só devolve o
+token para aplicações com `pode_gerir_identidades`, e essa é só o kanban. Não é
+limitação acidental: ter o token em mãos é poder sobre a conta de outra pessoa,
+e esse poder mora num lugar só, de propósito.
+
+O que o CRM ganhou em 28/08/2026 foi `pedir_link`, que é outra coisa: ele manda
+o Conecta ID **enviar** o link por e-mail, para o endereço da própria pessoa. O
+token não passa por aqui em momento nenhum, e a resposta é a mesma para
+qualquer endereço — inclusive um que não existe. É por isso que essa porta pode
+ficar aberta a um app comum enquanto a outra continua fechada.
 
 Espelhado de `conecta-kanban/apps/contas/identidade_senha.py`.
 """
@@ -69,8 +73,22 @@ def trocar(usuario, senha_atual, senha_nova, ip=None):
 
 
 def definir_por_token(token, senha_nova):
-    """Consome o token de uso único (gerado pelo kanban) e grava a senha."""
+    """Consome o token de uso único e grava a senha."""
     ClienteIdentidade().definir_senha(token, senha_nova)
+
+
+def pedir_link(email):
+    """Pede ao Conecta ID que envie o link de senha para este endereço.
+
+    Não devolve nada, e não é omissão: o serviço responde 202 para qualquer
+    e-mail, exista conta nele ou não. Quem chama daqui não tem — e não deve
+    ter — como distinguir os casos.
+
+    O teto de pedidos por hora é do Conecta ID, contado por e-mail e válido
+    para todos os apps juntos. Repetir a contagem aqui não somaria proteção:
+    quem quisesse encher a caixa de alguém trocaria de app.
+    """
+    ClienteIdentidade().esqueci_senha(email)
 
 
 __all__ = [
@@ -79,8 +97,10 @@ __all__ = [
     "IdentidadeIndisponivel",
     "SenhaFraca",
     "TokenInvalido",
+    "central_ativa",
     "definir_por_token",
     "identidade_de",
+    "pedir_link",
     "ip_do_request",
     "trocar",
     "usa_central",
