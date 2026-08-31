@@ -78,12 +78,22 @@ def _criar_usuario_local(dados):
     `sem_acesso_ao_app`). Então este ponto é consequência de uma decisão já
     tomada, não uma porta aberta.
 
-    Nasce **sem `is_staff` e sem `is_superuser`**: o CRM não tem hierarquia de
-    papéis (o único recorte é o escopo das chaves de API), então o que existe
-    para errar aqui é dar admin do Django a quem só precisava ver o funil.
-    Promover depois é um clique; descobrir que todo mundo virou staff, não.
+    Nasce **sem `is_staff` e sem `is_superuser`**, a menos que quem concedeu o
+    acesso no Conecta ID tenha marcado o contrário na configuração dele. O CRM
+    não tem hierarquia de papéis (o único recorte é o escopo das chaves de API),
+    então o que existe para errar aqui é dar admin do Django a quem só precisava
+    ver o funil — e por isso o padrão, na ausência de configuração, continua
+    sendo o menor: promover depois é um clique, descobrir que todo mundo virou
+    staff não é.
+
+    `is_superuser` fica de fora da configuração de propósito. Ele não é um grau
+    a mais de `is_staff`: passa por cima de toda checagem de permissão do
+    Django, e conceder isso preenchendo um campo de texto noutro sistema é
+    poder demais por um caminho curto demais.
     """
     from django.contrib.auth import get_user_model
+
+    from identidade_client import Provisionamento
 
     Usuario = get_user_model()
     email = (dados.get("email") or "").strip().lower()
@@ -102,6 +112,7 @@ def _criar_usuario_local(dados):
         first_name=partes[0][:150] if partes else "",
         last_name=" ".join(partes[1:])[:150],
         is_active=True,
+        is_staff=Provisionamento(dados).booleano("staff"),
     )
     # Sem senha utilizável: quem entra por aqui entra pelo Conecta ID. Uma senha
     # local viva seria um segundo caminho de entrada que ninguém lembra de fechar.
