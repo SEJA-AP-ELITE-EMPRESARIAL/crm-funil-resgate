@@ -51,7 +51,10 @@ def resolver_usuario(dados):
     from identidade_client import resolver_com_vinculo
 
     usuario = resolver_com_vinculo(
-        dados, VinculoIdentidade, ao_criar=_criar_usuario_local
+        dados,
+        VinculoIdentidade,
+        ao_criar=_criar_usuario_local,
+        ao_reaplicar=_reaplicar_provisionamento,
     )
     if usuario is None:
         return None
@@ -121,3 +124,24 @@ def _criar_usuario_local(dados):
 
     logger.info("conta local criada a partir do Conecta ID: %s (%s)", username, email)
     return usuario
+
+
+def _reaplicar_provisionamento(usuario, dados):
+    """Força a configuração do Conecta ID por cima de uma conta que já existe.
+
+    Só acontece quando alguém pediu, à mão, no admin do Conecta ID, e vale uma
+    vez. É a exceção à regra de que a configuração é semente — sem ela, marcar
+    alguém como administrador daqui não teria efeito sobre quem já entrou.
+
+    `is_superuser` continua de fora, como na criação: ele passa por cima de toda
+    checagem de permissão do Django, e concedê-lo preenchendo um campo de texto
+    noutro sistema seria poder demais por um caminho curto demais.
+    """
+    from identidade_client import Provisionamento
+
+    staff = Provisionamento(dados).booleano("staff", usuario.is_staff)
+    if staff == usuario.is_staff:
+        return
+    usuario.is_staff = staff
+    usuario.save(update_fields=["is_staff"])
+    logger.info("is_staff de %s reaplicado pelo Conecta ID: %s", usuario.email, staff)
