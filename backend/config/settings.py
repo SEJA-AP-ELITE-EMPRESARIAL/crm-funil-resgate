@@ -247,6 +247,12 @@ REST_FRAMEWORK = {
     #
     # O começo da lista é o que o próprio cliente escreveu, e é forjável; o
     # terceiro a partir do fim é o que a Cloudflare viu. Ver TSK-840.
+    #
+    # A conta supõe que TODO pedido passa pelas três camadas. É a trava da
+    # origem (TSK-614, no ar desde 30/09/2026) que garante isso: a origem só
+    # aceita a Cloudflare, então não existe cadeia mais curta chegando ao
+    # gunicorn. Tirar a trava sem mexer neste número devolve o cabeçalho
+    # forjável ao Conecta ID.
     "NUM_PROXIES": 3,
 }
 

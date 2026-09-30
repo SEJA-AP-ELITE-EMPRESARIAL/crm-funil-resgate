@@ -447,7 +447,6 @@ class SenhaPeloConectaIdTest(BaseLogin):
 # ACRESCENTA — nenhuma apaga o que veio antes.
 CADEIA_FORJADA = "10.9.8.7, 200.1.1.1, 172.64.0.1, 172.18.0.1"
 IP_REAL = "200.1.1.1"
-IP_FORJADO = "10.9.8.7"
 
 # A cadeia de produção tem três proxies de confiança. O `override` repete o
 # número em vez de ler o settings porque o que estes testes provam é o
@@ -541,31 +540,6 @@ class IpParaOConectaIdTest(BaseLogin):
 
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(trocar.call_args.kwargs["ip"], IP_REAL)
-
-    @patch("identidade_client.ClienteIdentidade.verificar")
-    def test_cadeia_mais_curta_que_a_cadeia_de_proxies_nao_acredita_no_cliente(
-        self, verificar
-    ):
-        """Cabeçalho com um item só: ele é do cliente, e vai como se fosse dele.
-
-        Esta é a pior entrada possível — quem fala direto com a origem, sem
-        Cloudflare, consegue produzi-la. O cliente pega o último item, que é o
-        único que existe, e o forjado passa. Não é para consertar aqui: a trava
-        da origem só pela Cloudflare é a TSK-614; o que este teste registra é
-        que, até ela, uma cadeia curta desloca a contagem — e que ela desloca
-        para o valor escrito, nunca para o IP de outra pessoa da cadeia longa.
-        """
-        verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
-
-        self.client.post(
-            TOKEN,
-            {"email": self.ana.email, "password": "chute"},
-            format="json",
-            HTTP_X_FORWARDED_FOR=IP_FORJADO,
-            REMOTE_ADDR="172.18.0.5",
-        )
-
-        self.assertEqual(verificar.call_args.kwargs["ip"], IP_FORJADO)
 
 
 @CENTRAL_LIGADA
