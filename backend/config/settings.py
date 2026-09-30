@@ -238,7 +238,28 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "api_key": CRM_API_RATE,
     },
+    # Proxies em que confiamos, contados da direita para a esquerda no
+    # X-Forwarded-For. A cadeia em produção tem três, e os três ACRESCENTAM ao
+    # cabeçalho (`$proxy_add_x_forwarded_for`), sem apagar o que veio antes:
+    #
+    #   Cloudflare -> nginx do host (deploy/nginx-host-conecta-crm.conf)
+    #              -> nginx do front (frontend/nginx.conf) -> gunicorn
+    #
+    # O começo da lista é o que o próprio cliente escreveu, e é forjável; o
+    # terceiro a partir do fim é o que a Cloudflare viu. Ver TSK-840.
+    #
+    # A conta supõe que TODO pedido passa pelas três camadas. É a trava da
+    # origem (TSK-614, no ar desde 30/09/2026) que garante isso: a origem só
+    # aceita a Cloudflare, então não existe cadeia mais curta chegando ao
+    # gunicorn. Tirar a trava sem mexer neste número devolve o cabeçalho
+    # forjável ao Conecta ID.
+    "NUM_PROXIES": 3,
 }
+
+# O mesmo número para o identidade_client (ele lê esta chave primeiro e cai no
+# NUM_PROXIES do DRF só se ela faltar). Vem daqui, e não de um 3 solto, para
+# que mexer na cadeia de proxies não exija lembrar de dois lugares.
+IDENTIDADE_NUM_PROXIES = REST_FRAMEWORK["NUM_PROXIES"]
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=240),

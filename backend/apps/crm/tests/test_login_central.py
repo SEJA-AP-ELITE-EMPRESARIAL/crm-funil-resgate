@@ -13,8 +13,9 @@ neste lado é como o CRM REAGE a cada resposta possível.
 """
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.crm.models import VinculoIdentidade
@@ -435,3 +436,135 @@ class SenhaPeloConectaIdTest(BaseLogin):
         from identidade_client import ClienteIdentidade
 
         self.assertFalse(hasattr(ClienteIdentidade, "redefinir_sem_token"))
+
+
+# === O IP que chega ao Conecta ID =========================================
+# A cadeia que um visitante mal-intencionado produz. Da esquerda para a
+# direita: `10.9.8.7` é o que ele mesmo escreveu no X-Forwarded-For (podia ser
+# o IP do escritório); `200.1.1.1` é o que a Cloudflare acrescentou, o IP de
+# verdade; `172.64.0.1` é a borda da Cloudflare vista pelo nginx do host; e
+# `172.18.0.1` é o nginx do host visto pelo nginx do front. Cada camada
+# ACRESCENTA — nenhuma apaga o que veio antes.
+CADEIA_FORJADA = "10.9.8.7, 200.1.1.1, 172.64.0.1, 172.18.0.1"
+IP_REAL = "200.1.1.1"
+
+# A cadeia de produção tem três proxies de confiança. O `override` repete o
+# número em vez de ler o settings porque o que estes testes provam é o
+# COMPORTAMENTO com três; que produção diga três é o teste logo abaixo.
+TRES_PROXIES = override_settings(
+    REST_FRAMEWORK={**settings.REST_FRAMEWORK, "NUM_PROXIES": 3},
+    IDENTIDADE_NUM_PROXIES=3,
+)
+
+
+class NumeroDeProxiesTest(TestCase):
+    """Trava a configuração real, sem override nenhum.
+
+    O teste de cima prova que três proxies dão o IP certo; este prova que é
+    três o que o app diz ter. Sem ele, mexer no settings passaria calado e o
+    bloqueio por IP do Conecta ID voltaria a trancar o escritório.
+    """
+
+    def test_o_crm_declara_tres_proxies(self):
+        # Cloudflare -> nginx do host -> nginx do front -> gunicorn.
+        self.assertEqual(settings.REST_FRAMEWORK["NUM_PROXIES"], 3)
+
+    def test_o_cliente_de_identidade_usa_o_mesmo_numero_do_drf(self):
+        """Um número, dois leitores. Divergir aqui é o CRM contar de dois jeitos."""
+        self.assertEqual(
+            settings.IDENTIDADE_NUM_PROXIES, settings.REST_FRAMEWORK["NUM_PROXIES"]
+        )
+
+
+@CENTRAL_LIGADA
+@TRES_PROXIES
+class IpParaOConectaIdTest(BaseLogin):
+    """O IP que vai ao Conecta ID é o que a Cloudflare viu.
+
+    O bloqueio por origem do Conecta ID é global: 20 erros em 15 min trancam o
+    IP por 30 min em TODOS os apps. Enquanto o CRM mandava o primeiro item do
+    X-Forwarded-For, dois estragos conviviam — trancar o escritório alheio de
+    fora, e escapar da própria contagem trocando o cabeçalho a cada tentativa.
+    """
+
+    TROCAR = "/api/crm/senha/"
+
+    def setUp(self):
+        super().setUp()
+        VinculoIdentidade.objects.create(usuario=self.ana, identidade_id=IDENTIDADE)
+
+    @patch("identidade_client.ClienteIdentidade.verificar")
+    def test_login_manda_o_ip_real_e_nao_o_forjado(self, verificar):
+        verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
+
+        self.client.post(
+            TOKEN,
+            {"email": self.ana.email, "password": "chute"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=CADEIA_FORJADA,
+            REMOTE_ADDR="172.18.0.5",
+        )
+
+        self.assertEqual(verificar.call_args.kwargs["ip"], IP_REAL)
+
+    @patch("identidade_client.ClienteIdentidade.verificar")
+    def test_login_pelo_django_admin_manda_o_mesmo_ip(self, verificar):
+        """O /admin/ não passa pelo DRF, e mesmo assim conta para o bloqueio.
+
+        Ele chama o `authenticate` do Django com o request, como o login do
+        front — e é o mesmo `BackendIdentidade` que responde. O teste existe
+        porque essa porta é fácil de esquecer: nenhuma linha do CRM a trata.
+        """
+        verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
+
+        Client().post(
+            "/admin/login/",
+            {"username": self.ana.email, "password": "chute"},
+            HTTP_X_FORWARDED_FOR=CADEIA_FORJADA,
+            REMOTE_ADDR="172.18.0.5",
+        )
+
+        self.assertEqual(verificar.call_args.kwargs["ip"], IP_REAL)
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_troca_de_senha_manda_o_ip_real(self, trocar):
+        self.client.force_authenticate(user=self.ana)
+
+        r = self.client.post(
+            self.TROCAR,
+            {"senha_atual": SENHA, "nova_senha": "outra-senha-bem-longa-987"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=CADEIA_FORJADA,
+            REMOTE_ADDR="172.18.0.5",
+        )
+
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(trocar.call_args.kwargs["ip"], IP_REAL)
+
+
+@CENTRAL_LIGADA
+@override_settings(
+    REST_FRAMEWORK={**settings.REST_FRAMEWORK, "NUM_PROXIES": 0},
+    IDENTIDADE_NUM_PROXIES=0,
+)
+class SemProxyNenhumTest(BaseLogin):
+    """Com zero proxies o X-Forwarded-For é lixo, e o cliente o ignora.
+
+    Não é um cenário do CRM em produção — é a prova de que o número manda. Se
+    um dia alguém tirar o nginx do front da frente, `NUM_PROXIES` vira 2 e a
+    conta anda junto; o que não pode é o cabeçalho valer por si.
+    """
+
+    @patch("identidade_client.ClienteIdentidade.verificar")
+    def test_o_cabecalho_e_ignorado_e_vale_o_remote_addr(self, verificar):
+        verificar.side_effect = CredencialInvalida("Credenciais inválidas.")
+
+        self.client.post(
+            TOKEN,
+            {"email": self.ana.email, "password": "chute"},
+            format="json",
+            HTTP_X_FORWARDED_FOR=CADEIA_FORJADA,
+            REMOTE_ADDR="172.18.0.5",
+        )
+
+        self.assertEqual(verificar.call_args.kwargs["ip"], "172.18.0.5")

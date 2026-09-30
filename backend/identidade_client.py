@@ -37,6 +37,35 @@ de novo dentro do app. Daí saíam as contas duplicadas.
 Leia sempre pela classe `Provisionamento`, nunca do dicionário cru: a carga é
 digitada por gente e pode trazer um valor que este app não conhece. O contrato
 é **provisionar melhor quando dá, nunca impedir o login**.
+
+## 1.3 — por que o link de senha não serve
+
+`TokenInvalido.motivo` diz por que um link REAL foi recusado: `"substituido"`
+(emitiram outro depois dele — só o link mais recente vale), `"expirado"` ou
+`"usado"`. `None` quando não há o que dizer: token inventado, ou conta
+desativada. É o que permite a tela trocar o "link inválido ou expirado" por uma
+frase que diz o que fazer; com a genérica, a pessoa pedia mais um link e anulava
+o que estava a caminho (incidente de 28/09/2026). O código do erro continua
+`token_invalido`: quem ainda usa a 1.2 recebe o mesmo erro de sempre.
+
+## 1.4 — o IP do usuário conta da direita
+
+O IP que vai ao Conecta ID (para o bloqueio por origem) saía do PRIMEIRO item do
+`X-Forwarded-For`, que é o que o próprio cliente escreve: cada proxy ACRESCENTA
+ao cabeçalho, sem apagar o que veio antes. Com `X-Forwarded-For: <IP do
+escritório>`, umas tentativas erradas trancavam o escritório inteiro, e trocar o
+cabeçalho a cada tentativa anulava a camada por IP contra senha comum (kanban,
+TSK-837, 30/09/2026).
+
+Desde a 1.4 o IP é o N-ésimo a partir do fim, com N = os proxies em que o app
+confia (`ip_do_request`). **Cada app precisa dizer quantos são:**
+
+    IDENTIDADE_NUM_PROXIES = 3   # ex.: Cloudflare -> nginx do host -> nginx do front
+
+Sem essa chave, vale o `REST_FRAMEWORK["NUM_PROXIES"]` do app, se ele tiver
+um maior que zero. Sem nenhuma das duas, o cliente mantém o comportamento
+antigo (o primeiro item), que é forjável, e avisa no log uma vez. `0` explícito
+quer dizer "não há proxy": vale o `REMOTE_ADDR`.
 """
 import json
 import logging
@@ -50,7 +79,55 @@ from django.utils.module_loading import import_string
 
 logger = logging.getLogger("identidade_client")
 
-VERSAO = "1.2.0"
+VERSAO = "1.4.0"
+
+
+# === IP do usuário ========================================================
+_AVISOU_SEM_PROXIES = False
+
+
+def _proxies_confiados():
+    """Quantos proxies o app diz ter na frente, ou `None` se não disse."""
+    explicito = getattr(settings, "IDENTIDADE_NUM_PROXIES", None)
+    if explicito is not None:
+        return int(explicito)
+    do_drf = int((getattr(settings, "REST_FRAMEWORK", {}) or {}).get("NUM_PROXIES") or 0)
+    return do_drf or None
+
+
+def ip_do_request(request):
+    """IP do usuário final, para a auditoria e o bloqueio por origem (1.4).
+
+    Cada proxy ACRESCENTA ao `X-Forwarded-For` o que recebeu, sem apagar o que
+    veio antes: o começo da lista é o que o cliente escreveu, e só o N-ésimo a
+    partir do fim foi posto por um proxy em que o app confia. Com N proxies,
+    é esse o IP. Com `0`, não há proxy e vale o `REMOTE_ADDR`.
+
+    Sem configuração nenhuma, mantém o comportamento de até a 1.3 (o primeiro
+    item) para não trocar de repente o IP de um app que ainda não disse quantos
+    proxies tem: com o `REMOTE_ADDR` do proxy, o bloqueio por IP viraria
+    bloqueio de todo mundo. Esse modo é forjável, e o log avisa.
+    """
+    global _AVISOU_SEM_PROXIES
+    if request is None:
+        return None
+    proxies = _proxies_confiados()
+    encaminhado = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    enderecos = [e.strip() for e in encaminhado.split(",") if e.strip()]
+    if proxies is None:
+        if enderecos:
+            if not _AVISOU_SEM_PROXIES:
+                _AVISOU_SEM_PROXIES = True
+                logger.warning(
+                    "identidade_client: IDENTIDADE_NUM_PROXIES não configurado; "
+                    "o IP enviado ao Conecta ID sai do começo do X-Forwarded-For, "
+                    "que o cliente pode forjar"
+                )
+            return enderecos[0]
+        return request.META.get("REMOTE_ADDR") or None
+    if proxies and enderecos:
+        return enderecos[-min(proxies, len(enderecos))]
+    return request.META.get("REMOTE_ADDR") or None
 
 
 # === Erros ================================================================
@@ -80,7 +157,20 @@ class SenhaFraca(ErroIdentidade):
 
 
 class TokenInvalido(ErroIdentidade):
-    """Link de senha inexistente, expirado ou já usado."""
+    """Link de senha inexistente, expirado, substituído ou já usado.
+
+    `motivo` (desde a 1.3): `"substituido"`, `"expirado"`, `"usado"` ou `None`.
+    `None` é o caso a tratar com a mensagem genérica — inclui o token inventado,
+    e a tela não deve distinguir esse de nada.
+    """
+
+    SUBSTITUIDO = "substituido"
+    EXPIRADO = "expirado"
+    USADO = "usado"
+
+    def __init__(self, mensagem="", motivo=None):
+        super().__init__(mensagem)
+        self.motivo = motivo
 
 
 class EmailEmUso(ErroIdentidade):
@@ -281,6 +371,8 @@ class ClienteIdentidade:
 
         if codigo == "email_em_uso":
             raise EmailEmUso(detalhe, corpo.get("identidade_id"))
+        if codigo == "token_invalido":
+            raise TokenInvalido(detalhe, corpo.get("motivo") or None)
 
         classe = _ERROS.get(codigo)
         if classe:
@@ -348,17 +440,8 @@ class BackendIdentidade(BaseBackend):
 
     @staticmethod
     def _ip(request):
-        """IP do usuário final, para a auditoria e o bloqueio por origem.
-
-        Atrás do nginx do host, o que vale é o X-Forwarded-For; o REMOTE_ADDR
-        seria sempre o do proxy, e o bloqueio por IP viraria bloqueio geral.
-        """
-        if request is None:
-            return None
-        encaminhado = request.META.get("HTTP_X_FORWARDED_FOR", "")
-        if encaminhado:
-            return encaminhado.split(",")[0].strip()
-        return request.META.get("REMOTE_ADDR")
+        """IP do usuário final: ver `ip_do_request` (conta da direita desde a 1.4)."""
+        return ip_do_request(request)
 
 
 # === Provisionamento ======================================================
