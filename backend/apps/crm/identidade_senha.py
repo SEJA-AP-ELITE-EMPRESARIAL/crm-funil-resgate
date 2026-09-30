@@ -33,6 +33,7 @@ from identidade_client import (
     SenhaFraca,
     TokenInvalido,
     central_ativa,
+    ip_do_request,
 )
 
 
@@ -52,22 +53,13 @@ def identidade_de(usuario):
     return usuario.vinculo_identidade.identidade_id
 
 
-def ip_do_request(request):
-    """IP do usuário final, para a auditoria e o bloqueio por origem do serviço.
-
-    Uma linha só, e de propósito: a regra é a do `identidade_client`, e é a
-    mesma que o login usa por dentro. Ter uma segunda cópia dela aqui foi o que
-    deixou o cabeçalho forjável passar pela troca de senha — o cliente escreve o
-    COMEÇO do X-Forwarded-For, porque cada proxy acrescenta sem apagar, e ler o
-    primeiro item era ler o que o visitante quis. Desde a 1.4 o cliente conta da
-    direita, com `IDENTIDADE_NUM_PROXIES` proxies de confiança.
-
-    O import é local para o `patch` em `apps.crm.identidade_senha.ip_do_request`
-    continuar valendo e para não amarrar este módulo ao cliente na importação.
-    """
-    from identidade_client import ip_do_request as do_cliente
-
-    return do_cliente(request)
+# `ip_do_request` é reexportado do cliente (import no topo), sem envelope: a
+# regra do IP é a dele, e é a mesma que o login usa por dentro. Ter uma SEGUNDA
+# cópia dela aqui foi o que deixou o cabeçalho forjável passar pela troca de
+# senha — o visitante escreve o COMEÇO do X-Forwarded-For, porque cada proxy
+# acrescenta sem apagar, e ler o primeiro item era ler o que ele quis. Desde a
+# 1.4 o cliente conta da direita, com `IDENTIDADE_NUM_PROXIES` proxies de
+# confiança (ver `config/settings.py`).
 
 
 def trocar(usuario, senha_atual, senha_nova, ip=None):
