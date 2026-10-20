@@ -116,6 +116,7 @@ crm-funil-resgate/
 | POST | `/api/crm/etapas/reordenar/` | Aplica a nova ordem das colunas |
 | GET/POST | `/api/crm/clientes/` | Lista (base compartilhada) / cria |
 | GET/PATCH/DELETE | `/api/crm/clientes/{id}/` | Detalha / atualiza (ex.: mover etapa) / remove |
+| POST | `/api/crm/diagnostico/erro-de-teste/` | Superusuário: exceção de propósito para conferir o GlitchTip |
 
 ### Integração externa (n8n, ConectaAP, terceiros)
 
@@ -137,7 +138,8 @@ e aplicações) em [`docs/11-api-guia-completo.md`](docs/11-api-guia-completo.md
 ## Testes
 
 ```bash
-cd backend && python manage.py test apps.crm     # 96 testes
+cd backend && python manage.py test apps.crm     # 154 testes
+cd frontend && npm test                            # GlitchTip e scripts do build (node --test)
 cd frontend && npm run build                       # valida a compilação
 ```
 

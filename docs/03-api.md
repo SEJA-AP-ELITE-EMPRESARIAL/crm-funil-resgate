@@ -202,6 +202,14 @@ Retorna `204`.
 ### `GET /api/crm/clientes/modelo-importacao/` — baixar modelo
 Retorna um `.xlsx` (attachment) com os cabeçalhos aceitos + uma linha de exemplo.
 
+## Diagnóstico
+
+### `POST /api/crm/diagnostico/erro-de-teste/` — exceção de propósito
+Termina em **500** de propósito, para conferir depois de um deploy que o erro chega
+ao GlitchTip (projeto `crm`) com o release certo (TSK-1147). Só **superusuário**, e
+só com o JWT do login: chave de API leva 401, outra conta leva 403 sem a exceção
+acontecer, e `GET` leva 405. Cota de 10 por hora por usuário (429 depois).
+
 ## Códigos de status
 
 | Código | Significado |

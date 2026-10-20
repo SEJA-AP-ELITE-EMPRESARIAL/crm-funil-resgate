@@ -73,8 +73,12 @@ no `~/.ssh/config`), cadastrada em *Deploy keys* do GitHub.
 ssh prod.solucoes.sejaap
 cd /opt/conecta/app/conecta-crm
 git pull --ff-only origin main
-docker compose up -d --build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
+
+O `GIT_COMMIT` é o *release* dos erros no GlitchTip; com o token dos source maps e
+a conferência depois do deploy, ver "Erros no GlitchTip" no
+[`deploy/RUNBOOK.md`](../deploy/RUNBOOK.md).
 
 Health e smoke:
 ```bash
@@ -114,7 +118,7 @@ Revogação pelo admin (`/admin/crm/apikey/`). Ver
 ## CI (GitHub Actions)
 
 `.github/workflows/ci.yml` roda a cada push/PR: **backend** (`manage.py check` +
-testes) e **frontend** (`npm ci` + `npm run build`). O CI **não** faz deploy — o
+testes) e **frontend** (`npm ci` + `npm test` + `npm run build`). O CI **não** faz deploy — o
 deploy é manual, pela VPS.
 
 ## Rollback
