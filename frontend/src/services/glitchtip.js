@@ -61,7 +61,7 @@ const CHAVE_SENSIVEL = new RegExp(
     "session|sessao|sessão|csrf|chave|api[_-]?key|app[_-]?key|jwt|dsn|signature|assinatura|",
     "cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|",
     "nome|razao|razão|contato|responsavel|responsável|indicador|consultor|empresa|",
-    "endereco|endereço",
+    "endereco|endereço|munic|notas|observa|motivo",
   ].join(""),
   "i",
 );
@@ -76,26 +76,31 @@ const CABECALHOS_PERMITIDOS = new Set([
 
 const NOMES_SENSIVEIS = CHAVE_SENSIVEL.source;
 
+// Partes das máscaras de chave. Valor entre aspas, com escape e com o `b` de
+// bytes (b'...'); o fim do texto vale como aspa de fechamento.
+const CHAVE_ENTRE_ASPAS = `(?:"[^"\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^"\\n]{0,64}?"|'[^'\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^'\\n]{0,64}?')`;
+const VALOR_ASPAS_DUPLAS = `b?"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`;
+const VALOR_ASPAS_SIMPLES = `b?'(?:[^'\\\\]|\\\\.)*(?:'|\\\\?$)`;
+// Valor sem aspas: vai até o separador ou até a próxima `chave=`/`chave:`, e leva
+// junto as palavras soltas no meio (`nome=Padaria Pao Quente etapa=x`).
+const VALOR_SEM_ASPAS = `[^&\\s"'()\\[\\],;]+(?:[ \\t]+(?![\\w-]{1,40}[ \\t]{0,3}[:=])[^&\\s"'()\\[\\],;]+)*`;
+
 // Só para texto que não é código: nas linhas de código dos frames, `senha = ...`
 // é nome de variável, e a máscara o estragaria.
 const MASCARAS_DE_CHAVE = [
-  // Chave sensível dentro de um TEXTO: JSON ou objeto com aspas simples
-  // ("nome": "..." e 'nome': '...'), formulário, query e argumento nomeado.
-  // Os trechos de nome têm teto ({0,64}, {0,40}) para a regex não ficar quadrática.
-  // O fim do texto vale como aspa de fechamento: num texto cortado, o valor que
-  // ficou aberto sai inteiro como [Filtrado], mesmo com o corte logo depois da
-  // barra de um escape.
-  [
-    new RegExp(`("[^"\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^"\\n]{0,64}?"\\s*:\\s*)"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`, "gi"),
-    '$1"[Filtrado]"',
-  ],
-  [
-    new RegExp(`('[^'\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^'\\n]{0,64}?'\\s*:\\s*)'(?:[^'\\\\]|\\\\.)*(?:'|\\\\?$)`, "gi"),
-    "$1'[Filtrado]'",
-  ],
+  // Chave sensível dentro de um TEXTO: JSON ou objeto, com qualquer par de aspas
+  // na chave e no valor. Os trechos de nome têm teto ({0,64}, {0,40}) para a
+  // regex não ficar quadrática. O fim do texto vale como aspa de fechamento: num
+  // texto cortado, o valor que ficou aberto sai inteiro como [Filtrado], mesmo
+  // com o corte logo depois da barra de um escape.
+  [new RegExp(`(${CHAVE_ENTRE_ASPAS}\\s*:\\s*)${VALOR_ASPAS_DUPLAS}`, "gi"), '$1"[Filtrado]"'],
+  [new RegExp(`(${CHAVE_ENTRE_ASPAS}\\s*:\\s*)${VALOR_ASPAS_SIMPLES}`, "gi"), "$1'[Filtrado]'"],
+  // Formulário, query, argumento nomeado e texto de log: senha=..., nome='...',
+  // `senha: ...`, `password = ...`, `Authorization: Basic ...`.
   [
     new RegExp(
-      `(\\b\\w{0,40}?(?:${NOMES_SENSIVEIS})\\w{0,40}?=)(?:'[^'\\n]*(?:'|$)|"[^"\\n]*(?:"|$)|[^&\\s"'()\\[\\],;]+)`,
+      `(\\b\\w{0,40}?(?:${NOMES_SENSIVEIS})\\w{0,40}?[ \\t]{0,3}[:=][ \\t]{0,3})` +
+        `(?:b?'(?:[^'\\\\\\n]|\\\\.)*(?:'|$)|b?"(?:[^"\\\\\\n]|\\\\.)*(?:"|$)|${VALOR_SEM_ASPAS})`,
       "gi",
     ),
     "$1[Filtrado]",
@@ -123,10 +128,14 @@ const MASCARAS_DE_DADO = [
   [/\beyJ[\w-]+(?:\.[\w-]*)*/g, "[token]"],
   // Partes com teto (64 e 253, os do RFC): sem ele a regex fica quadrática.
   [/[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}/g, "[e-mail]"],
-  [/\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}\/[A-Z0-9]{4}-\d{2}\b/g, "[CNPJ]"],
-  [/\b[A-Z0-9]{12}\d{2}\b/g, "[CNPJ]"],
-  [/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, "[CPF]"],
-  [/\b\d{11}\b/g, "[CPF]"],
+  // CNPJ numérico com a máscara inteira, parcial ou nenhuma.
+  [/\b\d{2}\.?\d{3}\.?\d{3}[/.]?\d{4}-?\d{2}\b/g, "[CNPJ]"],
+  // CNPJ alfanumérico, em maiúsculas ou minúsculas; sem máscara, com um dígito nas
+  // 12 primeiras posições (não pega `handleSubmit01`).
+  [/\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}\/[A-Z0-9]{4}-\d{2}\b/gi, "[CNPJ]"],
+  [/\b(?=[A-Z0-9]{0,11}\d)[A-Z0-9]{12}\d{2}\b/gi, "[CNPJ]"],
+  // CPF com a máscara inteira, parcial ou nenhuma.
+  [/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[CPF]"],
   // Telefone com DDD, com ou sem DDI (+55, 0055 ou 55 colado, como no link do
   // WhatsApp), com ou sem parênteses e zero de operadora, com ou sem o nono dígito.
   [
@@ -137,11 +146,12 @@ const MASCARAS_DE_DADO = [
     ),
     "[telefone]",
   ],
-  // Sem DDD: o celular de nove dígitos e o fixo de oito, que começa de 2 a 5. Um
-  // intervalo de anos (2025-2026) não é telefone.
+  // Sem DDD: o celular de nove dígitos, o fixo de oito, que começa de 2 a 5, e o
+  // celular antigo de oito, de 6 a 9, só com separador. Um intervalo de anos
+  // (2025-2026) não é telefone.
   [new RegExp(`(?<![\\w+.\\-])9${SEP}\\d{4}${SEP}\\d{4}(?!\\w)`, "g"), "[telefone]"],
   [
-    new RegExp(`(?<![\\w+.\\-])(?!(?:19|20)\\d\\d${SEP}(?:19|20)\\d\\d(?!\\w))[2-5]\\d{3}${SEP}\\d{4}(?!\\w)`, "g"),
+    new RegExp(`(?<![\\w+.\\-])(?!(?:19|20)\\d\\d${SEP}(?:19|20)\\d\\d(?!\\w))(?:[2-5]\\d{3}${SEP}|[6-9]\\d{3}[ .\\-])\\d{4}(?!\\w)`, "g"),
     "[telefone]",
   ],
 ];
@@ -270,6 +280,11 @@ function limparSerializado(extra) {
   return { ...extra, __serialized__: permitido };
 }
 
+// Campos do próprio SDK, que não carregam dado de ninguém e não passam pelas
+// máscaras: um debug ID como `01191234-5678-...` viraria "[telefone]-..." e o
+// frame perderia o source map.
+const CAMPOS_DO_SDK = ["event_id", "release", "dist", "environment", "timestamp", "start_timestamp", "debug_meta", "sdk"];
+
 /** `beforeSend`: o evento sai sem dado pessoal (ver o JSDoc do módulo). */
 export function limparEvento(evento) {
   if (!evento || typeof evento !== "object") return evento;
@@ -287,7 +302,20 @@ export function limparEvento(evento) {
       data: limparDadosDeRastro(rastro.data),
     }));
   }
-  return varrer(copia);
+  const guardados = {};
+  for (const campo of CAMPOS_DO_SDK) {
+    if (campo in copia) {
+      guardados[campo] = copia[campo];
+      delete copia[campo];
+    }
+  }
+  let rastreio;
+  if (copia.contexts && typeof copia.contexts === "object" && "trace" in copia.contexts) {
+    ({ trace: rastreio, ...copia.contexts } = copia.contexts);
+  }
+  const limpo = { ...varrer(copia), ...guardados };
+  if (rastreio !== undefined) limpo.contexts = { ...limpo.contexts, trace: rastreio };
+  return limpo;
 }
 
 /**

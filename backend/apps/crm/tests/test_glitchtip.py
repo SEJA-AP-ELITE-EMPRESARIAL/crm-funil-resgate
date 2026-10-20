@@ -76,6 +76,7 @@ TELEFONES = (
     ("3234-5678", "3234"),
     ("3234 5678", "3234"),
     ("32345678", "32345678"),
+    ("8123-4567", "8123"),
     ("https://wa.me/5511912345678", "912345678"),
     ("https://api.whatsapp.com/send?phone=5511912345678", "912345678"),
 )
@@ -183,7 +184,9 @@ class LimparEventoTests(SimpleTestCase):
                 self.assertNotIn(pedaco, limpo)
                 self.assertIn("[", limpo)
                 self.assertTrue(limpo.startswith("ligar para "), limpo)
-                self.assertTrue(limpo.endswith(" hoje"), limpo)
+                # Em `phone=...` a máscara de chave leva o valor e as palavras soltas depois.
+                if "=" not in telefone:
+                    self.assertTrue(limpo.endswith(" hoje"), limpo)
 
     def test_telefone_mascarado_tambem_na_linha_de_codigo(self):
         evento = limpar_evento({"exception": {"values": [{"stacktrace": {"frames": [{
@@ -219,6 +222,50 @@ class LimparEventoTests(SimpleTestCase):
             with self.subTest(texto=texto[:30]):
                 self.assertEqual(mascarar_texto(texto), esperado)
 
+    def test_chave_valor_com_aspas_misturadas_escape_bytes_e_espacos(self):
+        casos = {
+            # O repr do Python troca para aspas duplas quando o valor tem apóstrofo.
+            repr({"nome": "Padaria D'Ouro", "etapa": "ok"}): "{'nome': \"[Filtrado]\", 'etapa': 'ok'}",
+            "Cliente(nome='Maria D\\'Avila', x=1)": "Cliente(nome=[Filtrado], x=1)",
+            "{'senha': b'abc'}": "{'senha': '[Filtrado]'}",
+            "nome=Padaria Pao Quente etapa=priorizado": "nome=[Filtrado] etapa=priorizado",
+            "endereço=Rua das Flores 123": "endereço=[Filtrado]",
+            "senha: Minha123": "senha: [Filtrado]",
+            "token: abc.def": "token: [Filtrado]",
+            "password = hunter2": "password = [Filtrado]",
+            "notas=ligar depois do almoço": "notas=[Filtrado]",
+        }
+        for texto, esperado in casos.items():
+            with self.subTest(texto=texto[:30]):
+                self.assertEqual(mascarar_texto(texto), esperado)
+        for comum in ("erro: algo deu errado", "status=500 detail=x"):
+            self.assertEqual(mascarar_texto(comum), comum)
+
+    def test_cnpj_e_cpf_com_mascara_parcial_ou_minusculas(self):
+        for cnpj in ("12345678/0001-95", "12.345.678/000195", "12.345.678.0001-95", "12345678000195",
+                     "12abc34501de35", "12.abc.345/01de-35"):
+            with self.subTest(cnpj=cnpj):
+                self.assertEqual(mascarar_texto(f"cnpj {cnpj} ok"), "cnpj [CNPJ] ok")
+        for cpf in ("123456789-09", "123.456.78909", "12345678909"):
+            with self.subTest(cpf=cpf):
+                self.assertEqual(mascarar_texto(f"cpf {cpf} ok"), "cpf [CPF] ok")
+        self.assertEqual(mascarar_texto("handleSubmit01"), "handleSubmit01")
+
+    def test_campos_do_sdk_nao_passam_pelas_mascaras(self):
+        """Um debug ID que parece telefone não pode perder o source map do frame."""
+        debug_id = "01191234-5678-4abc-8def-0123456789ab"
+        evento = limpar_evento({
+            "event_id": "01191234567812345678901234567890",
+            "release": "1132345678",
+            "debug_meta": {"images": [{"debug_id": debug_id}]},
+            "contexts": {"trace": {"trace_id": "01191234-5678"}, "outro": {"telefone": "x"}},
+        })
+        self.assertEqual(evento["debug_meta"]["images"][0]["debug_id"], debug_id)
+        self.assertEqual(evento["event_id"], "01191234567812345678901234567890")
+        self.assertEqual(evento["release"], "1132345678")
+        self.assertEqual(evento["contexts"]["trace"], {"trace_id": "01191234-5678"})
+        self.assertEqual(evento["contexts"]["outro"], {"telefone": FILTRADO})
+
     def test_dicionario_com_campo_de_lead_tem_o_valor_trocado(self):
         evento = limpar_evento({"extra": {"cliente": {
             "nome": NOME_LEAD, "indicador_whatsapp": "11 91234-5678", "etapa": "priorizado"}}})
@@ -226,8 +273,11 @@ class LimparEventoTests(SimpleTestCase):
                          {"nome": FILTRADO, "indicador_whatsapp": FILTRADO, "etapa": "priorizado"})
 
     def test_chave_de_api_appkey_e_bearer_em_texto(self):
-        self.assertEqual(mascarar_texto(f"Authorization: Api-Key {CHAVE_API}"),
-                         "Authorization: Api-Key [token]")
+        self.assertEqual(mascarar_texto(f"cabeçalho Api-Key {CHAVE_API}"),
+                         "cabeçalho Api-Key [token]")
+        for credencial in (f"Api-Key {CHAVE_API}", "Basic dXNlcjpwYXNz", "Token abc123", f"Bearer {JWT}"):
+            with self.subTest(credencial=credencial[:10]):
+                self.assertEqual(mascarar_texto(f"Authorization: {credencial}"), "Authorization: [Filtrado]")
         self.assertEqual(mascarar_texto(f"chave vazada {CHAVE_API} no log"),
                          "chave vazada [api-key] no log")
         self.assertEqual(mascarar_texto("AppKey crm:segredo-do-conecta-id"), "AppKey [token]")

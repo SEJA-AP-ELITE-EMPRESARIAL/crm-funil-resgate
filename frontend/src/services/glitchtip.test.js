@@ -61,6 +61,7 @@ const TELEFONES = [
   ["3234-5678", "3234"],
   ["3234 5678", "3234"],
   ["32345678", "32345678"],
+  ["8123-4567", "8123"],
   ["https://wa.me/5511912345678", "912345678"],
   ["https://api.whatsapp.com/send?phone=5511912345678", "912345678"],
 ];
@@ -130,7 +131,9 @@ describe("limparEvento", () => {
     for (const [telefone, pedaco] of TELEFONES) {
       const saida = mascararTexto(`ligar para ${telefone} hoje`);
       assert.ok(!saida.includes(pedaco), `${telefone} -> ${saida}`);
-      assert.ok(saida.startsWith("ligar para ") && saida.endsWith(" hoje"), saida);
+      assert.ok(saida.startsWith("ligar para "), saida);
+      // Em `phone=...` a máscara de chave leva o valor e as palavras soltas depois.
+      if (!telefone.includes("=")) assert.ok(saida.endsWith(" hoje"), saida);
     }
   });
 
@@ -163,8 +166,47 @@ describe("limparEvento", () => {
     assert.equal(mascararTexto(`erro em <Cliente: ${NOME_LEAD}>`), "erro em <Cliente: [Filtrado]>");
   });
 
+  it("chave=valor com aspas misturadas, escape, bytes e espaços", () => {
+    const casos = [
+      [`{'nome': "Padaria D'Ouro", 'etapa': 'ok'}`, `{'nome': "[Filtrado]", 'etapa': 'ok'}`],
+      ["Cliente(nome='Maria D\\'Avila', x=1)", "Cliente(nome=[Filtrado], x=1)"],
+      ["{'senha': b'abc'}", "{'senha': '[Filtrado]'}"],
+      ["nome=Padaria Pao Quente etapa=priorizado", "nome=[Filtrado] etapa=priorizado"],
+      ["endereço=Rua das Flores 123", "endereço=[Filtrado]"],
+      ["senha: Minha123", "senha: [Filtrado]"],
+      ["password = hunter2", "password = [Filtrado]"],
+      ["notas=ligar depois do almoço", "notas=[Filtrado]"],
+      ["Authorization: Basic dXNlcjpwYXNz", "Authorization: [Filtrado]"],
+      ["Authorization: Token abc123", "Authorization: [Filtrado]"],
+    ];
+    for (const [texto, esperado] of casos) assert.equal(mascararTexto(texto), esperado);
+    for (const comum of ["erro: algo deu errado", "status=500 detail=x"]) assert.equal(mascararTexto(comum), comum);
+  });
+
+  it("CNPJ e CPF com máscara parcial ou em minúsculas", () => {
+    for (const cnpj of ["12345678/0001-95", "12.345.678/000195", "12.345.678.0001-95", "12abc34501de35", "12.abc.345/01de-35"]) {
+      assert.equal(mascararTexto(`cnpj ${cnpj} ok`), "cnpj [CNPJ] ok");
+    }
+    for (const cpf of ["123456789-09", "123.456.78909"]) assert.equal(mascararTexto(`cpf ${cpf} ok`), "cpf [CPF] ok");
+    assert.equal(mascararTexto("handleSubmit01"), "handleSubmit01");
+  });
+
+  it("campos do SDK não passam pelas máscaras (debug ID que parece telefone)", () => {
+    const debugId = "01191234-5678-4abc-8def-0123456789ab";
+    const evento = limparEvento({
+      event_id: "01191234567812345678901234567890",
+      release: "1132345678",
+      debug_meta: { images: [{ debug_id: debugId }] },
+      contexts: { trace: { trace_id: "01191234-5678" }, outro: { telefone: "x" } },
+    });
+    assert.equal(evento.debug_meta.images[0].debug_id, debugId);
+    assert.equal(evento.release, "1132345678");
+    assert.deepEqual(evento.contexts.trace, { trace_id: "01191234-5678" });
+    assert.deepEqual(evento.contexts.outro, { telefone: FILTRADO });
+  });
+
   it("chave de API, AppKey e Bearer em texto", () => {
-    assert.equal(mascararTexto(`Api-Key ${CHAVE_API}`), "Api-Key [token]");
+    assert.equal(mascararTexto(`cabeçalho Api-Key ${CHAVE_API}`), "cabeçalho Api-Key [token]");
     assert.equal(mascararTexto(`vazou ${CHAVE_API} aqui`), "vazou [api-key] aqui");
     assert.equal(mascararTexto("AppKey crm:segredo"), "AppKey [token]");
   });

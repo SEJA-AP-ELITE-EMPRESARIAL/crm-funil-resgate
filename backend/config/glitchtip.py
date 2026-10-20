@@ -44,14 +44,15 @@ FILTRADO = "[Filtrado]"
 
 # Chave cujo VALOR nunca sai, em qualquer nível do evento. Além das credenciais e
 # dos documentos, os campos de lead do CRM (`nome`, `indicador_whatsapp`,
-# `quem_fara_contato`, `responsavel`, `consultor_atual`...). `name` fica de fora
+# `quem_fara_contato`, `responsavel`, `consultor_atual`, `notas`, `motivo_distrato`,
+# `municipio`...). `name` fica de fora
 # de propósito: é chave do próprio SDK (`server_name`, `sdk.name`, `runtime.name`).
 CHAVE_SENSIVEL = re.compile(
     r"senha|password|passwd|pwd|secret|segredo|token|authori[sz]ation|auth|cookie|"
     r"session|sessao|sessão|csrf|chave|api[_-]?key|app[_-]?key|jwt|dsn|signature|assinatura|"
     r"cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|"
     r"nome|razao|razão|contato|responsavel|responsável|indicador|consultor|empresa|"
-    r"endereco|endereço",
+    r"endereco|endereço|munic|notas|observa|motivo",
     re.IGNORECASE,
 )
 
@@ -75,19 +76,36 @@ _NOMES_SENSIVEIS = CHAVE_SENSIVEL.pattern
 
 # Só para texto que não é código: nas linhas de código dos frames, `senha = ...`
 # e `.filter(telefone=telefone)` são nomes de variável, e a máscara os estragaria.
+# Partes das máscaras de chave. Valor entre aspas, com escape e com o `b` de bytes
+# (b'...'); o fim do texto vale como aspa de fechamento.
+_CHAVE_ENTRE_ASPAS = (r'(?:"[^"\n]{0,64}?(?:' + _NOMES_SENSIVEIS + r')[^"\n]{0,64}?"'
+                      r"|'[^'\n]{0,64}?(?:" + _NOMES_SENSIVEIS + r")[^'\n]{0,64}?')")
+_VALOR_ASPAS_DUPLAS = r'b?"(?:[^"\\]|\\.)*(?:"|\\?\Z)'
+_VALOR_ASPAS_SIMPLES = r"b?'(?:[^'\\]|\\.)*(?:'|\\?\Z)"
+# Valor sem aspas: vai até o separador (&, vírgula, ponto e vírgula, parêntese) ou
+# até a próxima `chave=`/`chave:`, e leva junto as palavras soltas no meio, para
+# `nome=Padaria Pao Quente etapa=x` não deixar "Pao Quente" para trás.
+_VALOR_SEM_ASPAS = (r"[^&\s\"'()\[\],;]+"
+                    r"(?:[ \t]+(?![\w-]{1,40}[ \t]{0,3}[:=])[^&\s\"'()\[\],;]+)*")
+
+# Só para texto que não é código: nas linhas de código dos frames, `senha = ...`
+# e `.filter(telefone=telefone)` são nomes de variável, e a máscara os estragaria.
 _MASCARAS_DE_CHAVE = (
-    # Chave sensível dentro de um TEXTO: JSON ou repr de dict ("nome": "..." e
-    # 'nome': '...'), formulário, query e argumento nomeado (senha=..., nome='...').
+    # Chave sensível dentro de um TEXTO: JSON ou repr de dict, com qualquer par de
+    # aspas na chave e no valor (o repr do Python troca para aspas duplas quando o
+    # valor tem apóstrofo: {'nome': "Padaria D'Ouro"}).
     # Os trechos de nome têm teto ({0,64}, {0,40}) para a regex não ficar quadrática.
     # O fim do texto vale como aspa de fechamento: num texto cortado, o valor que
     # ficou aberto ("senha": "Minha senha#20...) sai inteiro como [Filtrado], mesmo
     # que o corte tenha caído logo depois da barra de um escape (ç, \n).
-    (re.compile(r'("[^"\n]{0,64}?(?:' + _NOMES_SENSIVEIS + r')[^"\n]{0,64}?"\s*:\s*)"(?:[^"\\]|\\.)*(?:"|\\?\Z)',
-                re.IGNORECASE), r'\1"[Filtrado]"'),
-    (re.compile(r"('[^'\n]{0,64}?(?:" + _NOMES_SENSIVEIS + r")[^'\n]{0,64}?'\s*:\s*)'(?:[^'\\]|\\.)*(?:'|\\?\Z)",
-                re.IGNORECASE), r"\1'[Filtrado]'"),
-    (re.compile(r"(\b\w{0,40}?(?:" + _NOMES_SENSIVEIS + r")\w{0,40}?=)"
-                r"(?:'[^'\n]*(?:'|\Z)|\"[^\"\n]*(?:\"|\Z)|[^&\s\"'()\[\],;]+)",
+    (re.compile(r"(" + _CHAVE_ENTRE_ASPAS + r"\s*:\s*)" + _VALOR_ASPAS_DUPLAS, re.IGNORECASE),
+     r'\1"[Filtrado]"'),
+    (re.compile(r"(" + _CHAVE_ENTRE_ASPAS + r"\s*:\s*)" + _VALOR_ASPAS_SIMPLES, re.IGNORECASE),
+     r"\1'[Filtrado]'"),
+    # Formulário, query, argumento nomeado e texto de log: senha=..., nome='...',
+    # `senha: ...`, `password = ...`, `Authorization: Basic ...`.
+    (re.compile(r"(\b\w{0,40}?(?:" + _NOMES_SENSIVEIS + r")\w{0,40}?[ \t]{0,3}[:=][ \t]{0,3})"
+                r"(?:b?'(?:[^'\\\n]|\\.)*(?:'|\Z)|b?\"(?:[^\"\\\n]|\\.)*(?:\"|\Z)|" + _VALOR_SEM_ASPAS + r")",
                 re.IGNORECASE), r"\1[Filtrado]"),
 )
 
@@ -115,12 +133,17 @@ _MASCARAS_DE_DADO = (
     # Partes com teto (64 e 253, os do RFC): sem ele a regex reescaneia cada trecho
     # longo sem `@` e fica quadrática (50 KB custavam segundos).
     (re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}"), "[e-mail]"),
-    # CNPJ com máscara, numérico ou alfanumérico (o novo, de 2026: 12 posições
-    # de letra ou número e 2 dígitos verificadores).
-    (re.compile(r"\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}/[A-Z0-9]{4}-\d{2}\b"), "[CNPJ]"),
-    (re.compile(r"\b[A-Z0-9]{12}\d{2}\b"), "[CNPJ]"),
-    (re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b"), "[CPF]"),
-    (re.compile(r"\b\d{11}\b"), "[CPF]"),
+    # CNPJ numérico com a máscara inteira, parcial ou nenhuma (12345678/0001-95,
+    # 12.345.678/000195, 12.345.678.0001-95...): o campo `cnpj` guarda o que foi
+    # digitado ou importado, sem normalizar.
+    (re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}[/.]?\d{4}-?\d{2}\b"), "[CNPJ]"),
+    # CNPJ alfanumérico (o novo, de 2026: 12 posições de letra ou número e 2 dígitos
+    # verificadores), em maiúsculas ou minúsculas. Sem máscara, exige um dígito nas
+    # 12 primeiras posições, para não pegar um identificador como `handleSubmit01`.
+    (re.compile(r"(?i)\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}/[A-Z0-9]{4}-\d{2}\b"), "[CNPJ]"),
+    (re.compile(r"(?i)\b(?=[A-Z0-9]{0,11}\d)[A-Z0-9]{12}\d{2}\b"), "[CNPJ]"),
+    # CPF com a máscara inteira, parcial ou nenhuma (123.456.789-09, 123456789-09...).
+    (re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"), "[CPF]"),
     # Telefone com DDD, com ou sem DDI (+55, 0055 ou 55 colado, como no link do
     # WhatsApp), com ou sem parênteses e zero de operadora, com ou sem o nono
     # dígito e com espaço, ponto ou hífen entre os blocos:
@@ -128,12 +151,13 @@ _MASCARAS_DE_DADO = (
     (re.compile(r"(?<![\w+])(?:(?:\+|00) ?55" + _SEP + r"|55" + _SEP + r")?"
                 r"(?:\(0?[1-9]\d\)|0?[1-9]\d)" + _SEP +
                 r"(?:9" + _SEP + r"\d{4}|[2-9]\d{3})" + _SEP + r"\d{4}(?!\w)"), "[telefone]"),
-    # Sem DDD: o celular de nove dígitos (91234-5678, 9 1234 5678, 912345678) e o
-    # fixo de oito, que começa de 2 a 5 (3234-5678, 32345678). Um intervalo de anos
-    # (2025-2026) não é telefone.
+    # Sem DDD: o celular de nove dígitos (91234-5678, 9 1234 5678, 912345678), o
+    # fixo de oito, que começa de 2 a 5 (3234-5678, 32345678), e o celular antigo de
+    # oito, de 6 a 9, só com separador (8123-4567). Um intervalo de anos (2025-2026)
+    # não é telefone.
     (re.compile(r"(?<![\w+.\-])9" + _SEP + r"\d{4}" + _SEP + r"\d{4}(?!\w)"), "[telefone]"),
     (re.compile(r"(?<![\w+.\-])(?!(?:19|20)\d\d" + _SEP + r"(?:19|20)\d\d(?!\w))"
-                r"[2-5]\d{3}" + _SEP + r"\d{4}(?!\w)"), "[telefone]"),
+                r"(?:[2-5]\d{3}" + _SEP + r"|[6-9]\d{3}[ .\-])\d{4}(?!\w)"), "[telefone]"),
 )
 
 # Profundidade máxima da varredura: o SDK já corta o evento bem antes disso.
@@ -155,6 +179,12 @@ _CONTEXTO_DE_CODIGO = {"pre_context", "context_line", "post_context"}
 
 # Caracteres de que CPF, CNPJ, e-mail, telefone, JWT e URL são feitos.
 _PONTUACAO_DE_DADO = frozenset("._%+-@/=:()")
+
+# Campos do próprio SDK, que não carregam dado de ninguém e não passam pelas
+# máscaras: um debug ID como `01191234-5678-...` viraria "[telefone]-..." e o
+# frame perderia o source map.
+_CAMPOS_DO_SDK = ("event_id", "release", "dist", "environment", "timestamp",
+                  "start_timestamp", "debug_meta", "sdk")
 
 # Do `sys.argv` que a ArgvIntegration põe no evento, só o programa e o comando
 # (`manage.py criar_api_key`): o resto pode ser e-mail, nome ou senha.
@@ -299,7 +329,14 @@ def limpar_evento(evento, hint=None):
     _sem_variaveis_de_frame(evento)
     _limpar_rastros(evento)
     _argv_curto(evento)
-    return _varrer(evento)
+    guardados = {campo: evento.pop(campo) for campo in _CAMPOS_DO_SDK if campo in evento}
+    contextos = evento.get("contexts")
+    rastreio = contextos.pop("trace", None) if isinstance(contextos, dict) else None
+    limpo = _varrer(evento)
+    limpo.update(guardados)
+    if rastreio is not None:
+        limpo.setdefault("contexts", {})["trace"] = rastreio
+    return limpo
 
 
 def iniciar(dsn, release=None, environment="production", transport=None):
