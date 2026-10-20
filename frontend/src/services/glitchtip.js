@@ -82,9 +82,9 @@ const CHAVE_ENTRE_ASPAS = `(?:"[^"\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^"\\n]{0,64}
 const VALOR_ASPAS_DUPLAS = `b?"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`;
 const VALOR_ASPAS_SIMPLES = `b?'(?:[^'\\\\]|\\\\.)*(?:'|\\\\?$)`;
 // Lista ou objeto como valor ({'nome': ['Padaria'], "responsavel": {...}}): sai o
-// resto da linha inteiro. Achar o fecho exigiria contar aspas e aninhamento
-// ("Padaria [Centro]", listas dentro de listas), e regex não conta.
-const VALOR_LISTA_OU_OBJETO = "[\\[{][^\\n]*";
+// resto do TEXTO inteiro, como no DETAIL do Postgres. Achar o fecho exigiria contar
+// aspas e aninhamento (listas dentro de listas, JSON em várias linhas), e regex não conta.
+const VALOR_LISTA_OU_OBJETO = "[\\[{][\\s\\S]*";
 // Letra, número ou _, com acento: o `\w` do JS é só ASCII, e a chave pode ser
 // `observação` ou `município` (no Python o `\w` já é assim).
 const LETRA = "[\\p{L}\\p{N}_]";
