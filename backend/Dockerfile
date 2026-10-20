@@ -24,6 +24,13 @@ COPY . .
 # Estáticos do admin (gera o manifest do WhiteNoise; não toca no banco)
 RUN python manage.py collectstatic --noinput
 
+# Commit desta imagem (TSK-1147): é o `release` dos erros no GlitchTip. Gravado no
+# build, e não no ambiente do container, para que um `docker compose up -d` sem a
+# variável não apague o release nem declare um commit que a imagem não tem. Por
+# último, para não invalidar o cache do pip a cada commit.
+ARG GIT_COMMIT=
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 EXPOSE 8000
 
 CMD ["gunicorn", "config.wsgi:application", \

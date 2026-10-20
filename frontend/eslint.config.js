@@ -77,4 +77,19 @@ export default [
       globals: { ...globals.node },
     },
   },
+
+  // Os scripts do build de produção e os testes (`npm test`, no `node --test`)
+  // rodam no Node. O padrão de cima não pega .mjs; este bloco põe os dois na régua.
+  {
+    files: ['scripts/**/*.mjs', '**/*.test.{js,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+    },
+  },
 ]

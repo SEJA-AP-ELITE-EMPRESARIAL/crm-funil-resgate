@@ -80,8 +80,25 @@ WSSH="/c/Windows/System32/OpenSSH/ssh.exe"   # ssh nativo do Windows (Git Bash)
 
 cd /opt/conecta/app/conecta-crm
 git pull --ff-only origin main
-docker compose up -d --build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
+
+O `GIT_COMMIT` vira o *release* dos erros no GlitchTip (back e front). Sem ele a
+stack sobe igual, e os eventos chegam sem release. Para mandar também os source
+maps do front (o token, de escopo `project:releases`, fica em arquivo `chmod 600`
+fora do repositório e entra só como secret do build):
+
+```bash
+GLITCHTIP_AUTH_TOKEN="$(cat /opt/conecta/env/glitchtip_token)" \
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+O build avisa `GlitchTip: source maps do release <commit> enviados.` só depois de o
+servidor confirmar cada arquivo; qualquer falha só avisa e o deploy segue. Nenhum
+`.map` fica na imagem. Se o envio falhou (GlitchTip fora, por exemplo), repetir o
+mesmo comando reaproveita a camada do cache e não tenta de novo: para reenviar os
+mapas do mesmo commit, `docker compose build --no-cache frontend` com as duas
+variáveis acima e depois o `up -d`.
 
 Health:
 ```bash
@@ -113,7 +130,7 @@ git pull --ff-only origin main
 docker compose build backend                                    # imagem nova
 docker compose run --rm --no-deps backend python manage.py showmigrations crm
 docker compose run --rm --no-deps backend python manage.py migrate crm   # aplica
-docker compose up -d --build                                    # só então troca
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build   # só então troca
 ```
 
 Cuidados:
@@ -162,7 +179,7 @@ chmod 600 .env
 
 ### 5. Subir
 ```bash
-docker compose build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose build   # o commit fica gravado nas imagens
 docker compose up -d
 docker compose run --rm --no-deps backend python manage.py migrate   # banco novo
 ```
@@ -177,13 +194,37 @@ sudo nginx -t && sudo systemctl reload nginx
 ### 7. Validar
 Abra **https://conecta-crm.sejaap.com.br**. Admin do Django em `/admin/`.
 
+## Erros no GlitchTip (TSK-1147)
+
+As exceções não tratadas do backend (500) e os erros do navegador vão para o
+projeto **`crm`** de `https://erros.sejaap.com.br` (organização `seja-ap`), com
+`release` = `GIT_COMMIT` e `environment` = `production`. Telefone, e-mail, CNPJ, CPF,
+nome de lead, cookies, tokens e o corpo da requisição saem mascarados ou nem saem
+(`backend/config/glitchtip.py` e `frontend/src/services/glitchtip.js`). Sem
+`SENTRY_DSN`/`VITE_SENTRY_DSN` no `.env`, nada é enviado.
+
+Para conferir depois de um deploy, um superusuário dispara a exceção de teste
+(`POST`, só com o JWT do login, 10 por hora):
+
+```bash
+ACCESS=$(curl -s https://conecta-crm.sejaap.com.br/api/token/ \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "<e-mail do superusuário>", "password": "<senha>"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"])')
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  https://conecta-crm.sejaap.com.br/api/crm/diagnostico/erro-de-teste/ \
+  -H "Authorization: Bearer $ACCESS"          # espera 500
+```
+
+A issue `ErroDeTesteDoGlitchTip` aparece no projeto `crm` com o release do commit.
+No front, com o CRM aberto no navegador, `crmErroDeTesteGlitchtip()` no console.
+
 ## Rollback
 
 ```bash
 cd /opt/conecta/app/conecta-crm
 git log --oneline -10
 git checkout <commit-anterior>
-docker compose up -d --build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 # depois volte para a main quando a correção estiver pronta:
 git checkout main
 ```

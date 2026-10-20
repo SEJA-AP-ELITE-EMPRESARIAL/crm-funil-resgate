@@ -278,3 +278,36 @@ CORS_ALLOW_CREDENTIALS = True
 CRM_COMISSAO_RATE = float(os.environ.get("CRM_COMISSAO_RATE", "0.03"))
 # Duração padrão do contrato (meses) usada quando o cliente não informa.
 CRM_MESES_CONTRATO_PADRAO = int(os.environ.get("CRM_MESES_CONTRATO_PADRAO", "12"))
+
+# === GlitchTip (TSK-1147) ===
+# Erros não tratados do backend vão para o projeto `crm` do GlitchTip da SEJA AP
+# (https://erros.sejaap.com.br). A regra, inclusive a limpeza de dado pessoal,
+# mora em config/glitchtip.py.
+#
+# SENTRY_DSN          DSN do projeto `crm`. Vazio = SDK desligado, nada é enviado
+#                     (dev, testes e o collectstatic do build da imagem).
+# SENTRY_ENVIRONMENT  'production' se ausente.
+# GIT_COMMIT          vira o `release` do evento. O docker-compose.yml o passa como
+#                     build arg e o backend/Dockerfile o grava na imagem, então o
+#                     release é o commit da imagem que está no ar.
+from config.glitchtip import iniciar as _iniciar_glitchtip  # noqa: E402
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT", "").strip() or "production"
+SENTRY_RELEASE = os.environ.get("GIT_COMMIT", "").strip() or None
+
+
+def _rodando_testes() -> bool:
+    # O critério do SECURE_SSL_REDIRECT acima (`manage.py test`), mais o pytest.
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        return True
+    argv0 = os.path.basename(sys.argv[0] or "") if sys.argv else ""
+    return argv0.startswith("pytest") or argv0 == "py.test" or "test" in sys.argv[1:2]
+
+
+# Na suíte o SDK nunca liga, nem com SENTRY_DSN no ambiente ou no .env.
+GLITCHTIP_ATIVO = (
+    False
+    if _rodando_testes()
+    else _iniciar_glitchtip(SENTRY_DSN, release=SENTRY_RELEASE, environment=SENTRY_ENVIRONMENT)
+)

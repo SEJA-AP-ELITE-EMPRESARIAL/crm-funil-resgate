@@ -20,3 +20,7 @@ django-cors-headers==4.4.0
 python-dotenv==1.0.1
 openpyxl==3.1.5
 whitenoise==6.7.0
+
+# Cliente do GlitchTip (protocolo do Sentry), TSK-1147. Mesma versão do Conecta
+# (TSK-1136). Sem SENTRY_DSN no ambiente o SDK nem é iniciado.
+sentry-sdk==2.72.0

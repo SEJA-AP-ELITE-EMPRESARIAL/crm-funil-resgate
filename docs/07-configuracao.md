@@ -20,6 +20,9 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 | `CRM_COMISSAO_RATE` | `0.03` | Taxa de comissão (fração) |
 | `CRM_MESES_CONTRATO_PADRAO` | `12` | Meses padrão quando o cliente não define |
 | `CRM_API_RATE` | `120/min` | Cota por chave de API (formato do DRF, ex.: `120/min`, `5000/day`). Não afeta o front — ver [10](10-integracao-externa.md) |
+| `SENTRY_DSN` | vazio | DSN do projeto `crm` no GlitchTip. Vazio = nada é enviado; na suíte nunca liga. DSN malformado só avisa no stderr e o backend sobe sem SDK (TSK-1147) |
+| `SENTRY_ENVIRONMENT` | `production` | `environment` dos eventos |
+| `GIT_COMMIT` | vazio | `release` dos eventos. Não vai no `.env`: o `docker-compose.yml` o passa como build arg e ele fica gravado na imagem (`GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`) |
 
 **Precedência do banco:** `DATABASE_URL` → `CRM_DB_ENGINE=postgres` → SQLite (default dev).
 
@@ -50,6 +53,14 @@ Lidas em build pelo Vite (prefixo `VITE_`). Modelo: `frontend/.env.example`.
 | `VITE_PROXY_TARGET` | `http://localhost:8000` | Alvo do proxy `/api` em **dev** |
 | `VITE_API_URL` | vazio | Só se o front for servido **separado** da API. Na VPS fica vazio (mesma origem) |
 | `VITE_API_TIMEOUT` | `60000` | Timeout das requisições (ms) |
+| `VITE_SENTRY_DSN` | vazio | DSN do GlitchTip para o navegador (o mesmo projeto `crm`). Vazio = SDK desligado. Em produção o compose o lê do `.env` da raiz e passa como build arg |
+| `VITE_SENTRY_RELEASE` | vazio | Release dos eventos do front; o compose passa o mesmo `GIT_COMMIT` do backend |
+| `VITE_SENTRY_ENVIRONMENT` | `production` | `environment` dos eventos do front |
+
+Só no **build** da imagem do front, e nunca no `.env`: `GLITCHTIP_AUTH_TOKEN` (token
+de escopo `project:releases`), que o compose entrega como secret do BuildKit para
+mandar os source maps ao GlitchTip. Sem ele o build segue sem mapas. Ver
+[`deploy/RUNBOOK.md`](../deploy/RUNBOOK.md).
 
 ## Segurança
 
