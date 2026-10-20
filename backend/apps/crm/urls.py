@@ -1,6 +1,13 @@
 from django.urls import path
 
-from apps.crm.views import auth_views, cliente_views, etapa_views, funil_views, import_views
+from apps.crm.views import (
+    auth_views,
+    cliente_views,
+    diagnostico_views,
+    etapa_views,
+    funil_views,
+    import_views,
+)
 
 app_name = "crm"
 
@@ -24,4 +31,10 @@ urlpatterns = [
     path("clientes/importar/", import_views.importar, name="cliente_importar"),
     path("clientes/modelo-importacao/", import_views.modelo_importacao, name="cliente_modelo"),
     path("clientes/<int:cliente_id>/", cliente_views.cliente_item, name="cliente_item"),
+    # Diagnóstico: exceção de propósito para conferir o GlitchTip depois do deploy
+    path(
+        "diagnostico/erro-de-teste/",
+        diagnostico_views.erro_de_teste,
+        name="diagnostico_erro_de_teste",
+    ),
 ]
