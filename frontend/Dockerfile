@@ -29,6 +29,9 @@ ARG GLITCHTIP_ORG=seja-ap
 ARG GLITCHTIP_PROJETO=crm
 ARG SENTRY_CLI_VERSAO=3.8.0
 ARG SENTRY_CLI_SHA256=13f8cb34ae01a6a272d7d7c22e277a105286615b4020de900ea95a8de47cdbb6
+# "sim" quando o compose recebeu o token (nunca o token em si): separa no cache a
+# camada do build com mapas da do build sem eles.
+ARG GLITCHTIP_ENVIA_MAPAS=
 RUN --mount=type=secret,id=glitchtip_token sh scripts/build-com-sourcemaps.sh
 
 FROM nginx:1.27-alpine

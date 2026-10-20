@@ -97,7 +97,7 @@ git pull --ff-only origin main
 docker compose build backend
 docker compose run --rm --no-deps backend python manage.py showmigrations crm
 docker compose run --rm --no-deps backend python manage.py migrate crm
-docker compose up -d --build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 ```
 
 Backup antes de qualquer migration **destrutiva**. Criação de tabela é aditiva e
@@ -126,7 +126,7 @@ deploy é manual, pela VPS.
 ```bash
 cd /opt/conecta/app/conecta-crm
 git checkout <commit-anterior>
-docker compose up -d --build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 git checkout main     # quando a correção estiver pronta
 ```
 Se havia migration, reverta o schema antes de voltar o código. Não existe rollback

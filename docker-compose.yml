@@ -23,15 +23,16 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        # Commit da main deployada, passado no comando do deploy (TSK-1147):
+        #   GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+        # Fica gravado na imagem e é o `release` dos eventos no GlitchTip (o
+        # SENTRY_DSN vem do .env). Build sem ele: eventos sem release.
+        GIT_COMMIT: ${GIT_COMMIT:-}
     container_name: conecta-crm-backend
     env_file: .env
-    environment:
-      # Commit da main deployada, passado no comando do deploy (TSK-1147):
-      #   GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
-      # É o `release` dos eventos no GlitchTip; o SENTRY_DSN vem do .env. Vazio
-      # quando não passado: o evento sai sem release.
-      GIT_COMMIT: ${GIT_COMMIT:-}
     restart: unless-stopped
     depends_on:
       - db-tunnel
@@ -61,6 +62,10 @@ services:
         # O compose lê o VITE_SENTRY_DSN do .env ao lado deste arquivo.
         VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
         VITE_SENTRY_RELEASE: ${GIT_COMMIT:-}
+        # Só "sim" ou vazio, nunca o token: o cache do BuildKit não enxerga o secret,
+        # e sem isto um build com token reaproveitaria a camada de um build sem
+        # token do mesmo commit, sem mandar os mapas.
+        GLITCHTIP_ENVIA_MAPAS: ${GLITCHTIP_AUTH_TOKEN:+sim}
       # Token do GlitchTip (escopo project:releases) para enviar os source maps no
       # build. Vai como secret de build, fora das camadas e do histórico da imagem;
       # vazio = build sem mapas. Passe-o só no comando do deploy, NUNCA no .env: o

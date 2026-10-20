@@ -22,7 +22,7 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 | `CRM_API_RATE` | `120/min` | Cota por chave de API (formato do DRF, ex.: `120/min`, `5000/day`). Não afeta o front — ver [10](10-integracao-externa.md) |
 | `SENTRY_DSN` | vazio | DSN do projeto `crm` no GlitchTip. Vazio = nada é enviado; na suíte nunca liga. DSN malformado só avisa no stderr e o backend sobe sem SDK (TSK-1147) |
 | `SENTRY_ENVIRONMENT` | `production` | `environment` dos eventos |
-| `GIT_COMMIT` | vazio | `release` dos eventos. Não vai no `.env`: o `docker-compose.yml` o repassa do comando do deploy (`GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`) |
+| `GIT_COMMIT` | vazio | `release` dos eventos. Não vai no `.env`: o `docker-compose.yml` o passa como build arg e ele fica gravado na imagem (`GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`) |
 
 **Precedência do banco:** `DATABASE_URL` → `CRM_DB_ENGINE=postgres` → SQLite (default dev).
 

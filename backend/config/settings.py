@@ -287,8 +287,9 @@ CRM_MESES_CONTRATO_PADRAO = int(os.environ.get("CRM_MESES_CONTRATO_PADRAO", "12"
 # SENTRY_DSN          DSN do projeto `crm`. Vazio = SDK desligado, nada é enviado
 #                     (dev, testes e o collectstatic do build da imagem).
 # SENTRY_ENVIRONMENT  'production' se ausente.
-# GIT_COMMIT          vira o `release` do evento. O docker-compose.yml o repassa ao
-#                     container, então o release é o commit da imagem que está no ar.
+# GIT_COMMIT          vira o `release` do evento. O docker-compose.yml o passa como
+#                     build arg e o backend/Dockerfile o grava na imagem, então o
+#                     release é o commit da imagem que está no ar.
 from config.glitchtip import iniciar as _iniciar_glitchtip  # noqa: E402
 
 SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()

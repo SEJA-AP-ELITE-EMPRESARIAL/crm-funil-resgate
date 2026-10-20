@@ -176,7 +176,7 @@ chmod 600 .env
 
 ### 5. Subir
 ```bash
-docker compose build
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose build   # o commit fica gravado nas imagens
 docker compose up -d
 docker compose run --rm --no-deps backend python manage.py migrate   # banco novo
 ```
