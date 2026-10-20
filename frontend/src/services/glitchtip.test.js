@@ -187,8 +187,12 @@ describe("limparEvento", () => {
       ["município: São Paulo", "município: [Filtrado]"],
       ["https://x/?nome=Padaria&id=3", "https://x/?nome=[Filtrado]&id=3"],
       // Lista ou objeto como valor.
-      ["<QueryDict: {'nome': ['Padaria do João'], 'etapa': ['x']}>", "<QueryDict: {'nome': [Filtrado], 'etapa': ['x']}>"],
-      ['{"responsavel": {"first_name": "Maria", "last_name": "Souza"}}', '{"responsavel": [Filtrado]}'],
+      // O resto da linha vai junto: o fecho da lista não é confiável.
+      ["<QueryDict: {'nome': ['Padaria do João'], 'etapa': ['x']}>", "<QueryDict: {'nome': [Filtrado]"],
+      ['{"nome": ["Padaria [Centro] São João"], "etapa": "x"}', '{"nome": [Filtrado]'],
+      ['{"nomes": [["Ana", "Bia"], ["Cia"]]}', '{"nomes": [Filtrado]'],
+      ['{"responsavel": {"first_name": "Maria", "last_name": "Souza"}}', '{"responsavel": [Filtrado]'],
+      ["erro {'nome': ['Padaria']}\nlinha seguinte", "erro {'nome': [Filtrado]\nlinha seguinte"],
       ["username=maria.souza first_name=Maria", "username=[Filtrado] first_name=[Filtrado]"],
     ];
     for (const [texto, esperado] of casos) assert.equal(mascararTexto(texto), esperado);

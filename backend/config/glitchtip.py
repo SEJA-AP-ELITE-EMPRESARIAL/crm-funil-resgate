@@ -82,9 +82,11 @@ _CHAVE_ENTRE_ASPAS = (r'(?:"[^"\n]{0,64}?(?:' + _NOMES_SENSIVEIS + r')[^"\n]{0,6
                       r"|'[^'\n]{0,64}?(?:" + _NOMES_SENSIVEIS + r")[^'\n]{0,64}?')")
 _VALOR_ASPAS_DUPLAS = r'b?"(?:[^"\\]|\\.)*(?:"|\\?\Z)'
 _VALOR_ASPAS_SIMPLES = r"b?'(?:[^'\\]|\\.)*(?:'|\\?\Z)"
-# Lista ou objeto como valor ({'nome': ['Padaria'], "responsavel": {...}}): sai
-# até o fecho, ou até 2000 caracteres e o fim da linha (sem fecho, sem backtracking).
-_VALOR_LISTA_OU_OBJETO = r"(?:\[[^\]\n]{0,2000}\]?|\{[^}\n]{0,2000}\}?)"
+# Lista ou objeto como valor ({'nome': ['Padaria'], "responsavel": {...}}): sai o
+# resto da linha inteiro. Achar o fecho exigiria contar aspas e aninhamento
+# ("Padaria [Centro]", listas dentro de listas), e regex não conta; perder o que
+# vem depois na mesma linha é o preço de nada do valor escapar.
+_VALOR_LISTA_OU_OBJETO = r"[\[{][^\n]*"
 # Valor sem aspas: vai até o fim da linha ou até a próxima `chave=`/`chave:`
 # (depois de espaço, vírgula, ponto e vírgula ou &). Aspas, apóstrofo, parêntese,
 # vírgula e & no meio são do valor: razão social tem "D'Ouro", "& Filhos",
