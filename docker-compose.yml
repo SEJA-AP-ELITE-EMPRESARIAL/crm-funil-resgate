@@ -26,6 +26,12 @@ services:
     build: ./backend
     container_name: conecta-crm-backend
     env_file: .env
+    environment:
+      # Commit da main deployada, passado no comando do deploy (TSK-1147):
+      #   GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+      # É o `release` dos eventos no GlitchTip; o SENTRY_DSN vem do .env. Vazio
+      # quando não passado: o evento sai sem release.
+      GIT_COMMIT: ${GIT_COMMIT:-}
     restart: unless-stopped
     depends_on:
       - db-tunnel
@@ -47,7 +53,22 @@ services:
       start_period: 40s
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # GlitchTip (TSK-1147): DSN do projeto `crm` para o navegador (vazio = SDK
+        # desligado) e o commit do deploy como release, o mesmo GIT_COMMIT do backend.
+        # O compose lê o VITE_SENTRY_DSN do .env ao lado deste arquivo.
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_RELEASE: ${GIT_COMMIT:-}
+      # Token do GlitchTip (escopo project:releases) para enviar os source maps no
+      # build. Vai como secret de build, fora das camadas e do histórico da imagem;
+      # vazio = build sem mapas. Passe-o só no comando do deploy, NUNCA no .env: o
+      # .env é o env_file do backend, e o token iria parar no ambiente do container.
+      #   GLITCHTIP_AUTH_TOKEN="$(cat /opt/conecta/env/glitchtip_token)" \
+      #   GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+      secrets:
+        - glitchtip_token
     container_name: conecta-crm-frontend
     depends_on:
       - backend
@@ -61,6 +82,12 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+secrets:
+  # Só existe no build do frontend (ver o serviço). Sem a variável, o secret vem
+  # vazio e o build segue sem source maps.
+  glitchtip_token:
+    environment: GLITCHTIP_AUTH_TOKEN
 
 networks:
   # Criada e mantida pela stack do Conecta ID (/opt/identidade/app), que roda
