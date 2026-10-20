@@ -178,13 +178,26 @@ describe("limparEvento", () => {
       ["notas=ligar depois do almoço", "notas=[Filtrado]"],
       ["Authorization: Basic dXNlcjpwYXNz", "Authorization: [Filtrado]"],
       ["Authorization: Token abc123", "Authorization: [Filtrado]"],
+      // Pontuação de razão social e de texto livre é do valor; chave com acento.
+      ["nome=Padaria D'Ouro Ltda etapa=x", "nome=[Filtrado] etapa=x"],
+      ["nome: Padaria São João & Filhos", "nome: [Filtrado]"],
+      ["nome_fantasia: Padaria (Centro) Ltda", "nome_fantasia: [Filtrado]"],
+      ["notas=Cliente bravo, ligar amanhã", "notas=[Filtrado]"],
+      ["observação: Cliente pediu desconto", "observação: [Filtrado]"],
+      ["município: São Paulo", "município: [Filtrado]"],
+      ["https://x/?nome=Padaria&id=3", "https://x/?nome=[Filtrado]&id=3"],
+      // Lista ou objeto como valor.
+      ["<QueryDict: {'nome': ['Padaria do João'], 'etapa': ['x']}>", "<QueryDict: {'nome': [Filtrado], 'etapa': ['x']}>"],
+      ['{"responsavel": {"first_name": "Maria", "last_name": "Souza"}}', '{"responsavel": [Filtrado]}'],
+      ["username=maria.souza first_name=Maria", "username=[Filtrado] first_name=[Filtrado]"],
     ];
     for (const [texto, esperado] of casos) assert.equal(mascararTexto(texto), esperado);
     for (const comum of ["erro: algo deu errado", "status=500 detail=x"]) assert.equal(mascararTexto(comum), comum);
   });
 
   it("CNPJ e CPF com máscara parcial ou em minúsculas", () => {
-    for (const cnpj of ["12345678/0001-95", "12.345.678/000195", "12.345.678.0001-95", "12abc34501de35", "12.abc.345/01de-35"]) {
+    for (const cnpj of ["12345678/0001-95", "12.345.678/000195", "12.345.678.0001-95", "12abc34501de35", "12.abc.345/01de-35",
+      "12ABC345/01DE-35", "12.ABC.345/01DE35", "12ABC34501DE-35", "12.ABC.34501DE35"]) {
       assert.equal(mascararTexto(`cnpj ${cnpj} ok`), "cnpj [CNPJ] ok");
     }
     for (const cpf of ["123456789-09", "123.456.78909"]) assert.equal(mascararTexto(`cpf ${cpf} ok`), "cpf [CPF] ok");

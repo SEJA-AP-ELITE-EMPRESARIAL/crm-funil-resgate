@@ -95,7 +95,10 @@ GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
 
 O build avisa `GlitchTip: source maps do release <commit> enviados.` só depois de o
 servidor confirmar cada arquivo; qualquer falha só avisa e o deploy segue. Nenhum
-`.map` fica na imagem.
+`.map` fica na imagem. Se o envio falhou (GlitchTip fora, por exemplo), repetir o
+mesmo comando reaproveita a camada do cache e não tenta de novo: para reenviar os
+mapas do mesmo commit, `docker compose build --no-cache frontend` com as duas
+variáveis acima e depois o `up -d`.
 
 Health:
 ```bash

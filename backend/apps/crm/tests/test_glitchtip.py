@@ -234,6 +234,18 @@ class LimparEventoTests(SimpleTestCase):
             "token: abc.def": "token: [Filtrado]",
             "password = hunter2": "password = [Filtrado]",
             "notas=ligar depois do almoço": "notas=[Filtrado]",
+            # Pontuação de razão social e de texto livre é do valor.
+            "nome=Padaria D'Ouro Ltda etapa=x": "nome=[Filtrado] etapa=x",
+            "nome: Padaria São João & Filhos": "nome: [Filtrado]",
+            "nome_fantasia: Padaria (Centro) Ltda": "nome_fantasia: [Filtrado]",
+            "notas=Cliente bravo, ligar amanhã": "notas=[Filtrado]",
+            "observação: Cliente pediu desconto": "observação: [Filtrado]",
+            "https://x/?nome=Padaria&id=3": "https://x/?nome=[Filtrado]&id=3",
+            # Lista ou objeto como valor (o repr da QueryDict de um multipart).
+            "<QueryDict: {'nome': ['Padaria do João'], 'etapa': ['x']}>":
+                "<QueryDict: {'nome': [Filtrado], 'etapa': ['x']}>",
+            '{"responsavel": {"first_name": "Maria", "last_name": "Souza"}}': '{"responsavel": [Filtrado]}',
+            "username=maria.souza first_name=Maria": "username=[Filtrado] first_name=[Filtrado]",
         }
         for texto, esperado in casos.items():
             with self.subTest(texto=texto[:30]):
@@ -243,7 +255,8 @@ class LimparEventoTests(SimpleTestCase):
 
     def test_cnpj_e_cpf_com_mascara_parcial_ou_minusculas(self):
         for cnpj in ("12345678/0001-95", "12.345.678/000195", "12.345.678.0001-95", "12345678000195",
-                     "12abc34501de35", "12.abc.345/01de-35"):
+                     "12abc34501de35", "12.abc.345/01de-35", "12ABC345/01DE-35", "12.ABC.345/01DE35",
+                     "12ABC34501DE-35", "12.ABC.34501DE35"):
             with self.subTest(cnpj=cnpj):
                 self.assertEqual(mascarar_texto(f"cnpj {cnpj} ok"), "cnpj [CNPJ] ok")
         for cpf in ("123456789-09", "123.456.78909", "12345678909"):

@@ -50,7 +50,7 @@ FILTRADO = "[Filtrado]"
 CHAVE_SENSIVEL = re.compile(
     r"senha|password|passwd|pwd|secret|segredo|token|authori[sz]ation|auth|cookie|"
     r"session|sessao|sessão|csrf|chave|api[_-]?key|app[_-]?key|jwt|dsn|signature|assinatura|"
-    r"cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|"
+    r"cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|first_name|last_name|full_name|username|"
     r"nome|razao|razão|contato|responsavel|responsável|indicador|consultor|empresa|"
     r"endereco|endereço|munic|notas|observa|motivo",
     re.IGNORECASE,
@@ -82,11 +82,14 @@ _CHAVE_ENTRE_ASPAS = (r'(?:"[^"\n]{0,64}?(?:' + _NOMES_SENSIVEIS + r')[^"\n]{0,6
                       r"|'[^'\n]{0,64}?(?:" + _NOMES_SENSIVEIS + r")[^'\n]{0,64}?')")
 _VALOR_ASPAS_DUPLAS = r'b?"(?:[^"\\]|\\.)*(?:"|\\?\Z)'
 _VALOR_ASPAS_SIMPLES = r"b?'(?:[^'\\]|\\.)*(?:'|\\?\Z)"
-# Valor sem aspas: vai até o separador (&, vírgula, ponto e vírgula, parêntese) ou
-# até a próxima `chave=`/`chave:`, e leva junto as palavras soltas no meio, para
-# `nome=Padaria Pao Quente etapa=x` não deixar "Pao Quente" para trás.
-_VALOR_SEM_ASPAS = (r"[^&\s\"'()\[\],;]+"
-                    r"(?:[ \t]+(?![\w-]{1,40}[ \t]{0,3}[:=])[^&\s\"'()\[\],;]+)*")
+# Lista ou objeto como valor ({'nome': ['Padaria'], "responsavel": {...}}): sai
+# até o fecho, ou até 2000 caracteres e o fim da linha (sem fecho, sem backtracking).
+_VALOR_LISTA_OU_OBJETO = r"(?:\[[^\]\n]{0,2000}\]?|\{[^}\n]{0,2000}\}?)"
+# Valor sem aspas: vai até o fim da linha ou até a próxima `chave=`/`chave:`
+# (depois de espaço, vírgula, ponto e vírgula ou &). Aspas, apóstrofo, parêntese,
+# vírgula e & no meio são do valor: razão social tem "D'Ouro", "& Filhos",
+# "(Centro)", e `notas` é texto livre. Cada caractere olha no máximo ~45 adiante.
+_VALOR_SEM_ASPAS = r"(?:(?![,;&\s][ \t]{0,3}[\w-]{1,40}[ \t]{0,3}[:=])[^\n])+"
 
 # Só para texto que não é código: nas linhas de código dos frames, `senha = ...`
 # e `.filter(telefone=telefone)` são nomes de variável, e a máscara os estragaria.
@@ -102,10 +105,13 @@ _MASCARAS_DE_CHAVE = (
      r'\1"[Filtrado]"'),
     (re.compile(r"(" + _CHAVE_ENTRE_ASPAS + r"\s*:\s*)" + _VALOR_ASPAS_SIMPLES, re.IGNORECASE),
      r"\1'[Filtrado]'"),
+    (re.compile(r"(" + _CHAVE_ENTRE_ASPAS + r"\s*:\s*)" + _VALOR_LISTA_OU_OBJETO, re.IGNORECASE),
+     r"\1[Filtrado]"),
     # Formulário, query, argumento nomeado e texto de log: senha=..., nome='...',
     # `senha: ...`, `password = ...`, `Authorization: Basic ...`.
     (re.compile(r"(\b\w{0,40}?(?:" + _NOMES_SENSIVEIS + r")\w{0,40}?[ \t]{0,3}[:=][ \t]{0,3})"
-                r"(?:b?'(?:[^'\\\n]|\\.)*(?:'|\Z)|b?\"(?:[^\"\\\n]|\\.)*(?:\"|\Z)|" + _VALOR_SEM_ASPAS + r")",
+                r"(?:b?'(?:[^'\\\n]|\\.)*(?:'|\Z)|b?\"(?:[^\"\\\n]|\\.)*(?:\"|\Z)|"
+                + _VALOR_LISTA_OU_OBJETO + r"|" + _VALOR_SEM_ASPAS + r")",
                 re.IGNORECASE), r"\1[Filtrado]"),
 )
 
@@ -119,7 +125,7 @@ _MASCARAS_DE_DADO = (
     # DETAIL, o valor do `Key (coluna)=(valor)` some e a coluna fica.
     (re.compile(r"DETAIL:.*", re.DOTALL), "DETAIL: [Filtrado]"),
     (re.compile(r"Failing row contains \(.*", re.DOTALL), "Failing row contains ([Filtrado])"),
-    (re.compile(r"(\bKey \([^)]*\))=\((?:[^()]|\([^()]*(?:\)|\Z))*(?:\)|\Z)"), r"\1=([Filtrado])"),
+    (re.compile(r"(\bKey \([^)]{0,200}\))=\((?:[^()]|\([^()]*(?:\)|\Z))*(?:\)|\Z)"), r"\1=([Filtrado])"),
     # O repr de um Cliente é o nome do lead (`Cliente.__str__`); o de um User é o
     # username. O teto de 200 é o do campo `nome`.
     (re.compile(r"<(Cliente|User|VinculoIdentidade|ApiKey): [^<>\n]{0,200}(?:>|\Z)"), r"<\1: [Filtrado]>"),
@@ -140,7 +146,9 @@ _MASCARAS_DE_DADO = (
     # CNPJ alfanumérico (o novo, de 2026: 12 posições de letra ou número e 2 dígitos
     # verificadores), em maiúsculas ou minúsculas. Sem máscara, exige um dígito nas
     # 12 primeiras posições, para não pegar um identificador como `handleSubmit01`.
-    (re.compile(r"(?i)\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}/[A-Z0-9]{4}-\d{2}\b"), "[CNPJ]"),
+    # Com máscara inteira ou parcial: pelo menos um separador (., / ou -).
+    (re.compile(r"(?i)\b(?=[A-Z0-9]{2,14}[./-])[A-Z0-9]{2}\.?[A-Z0-9]{3}\.?[A-Z0-9]{3}[/.]?[A-Z0-9]{4}-?\d{2}\b"),
+     "[CNPJ]"),
     (re.compile(r"(?i)\b(?=[A-Z0-9]{0,11}\d)[A-Z0-9]{12}\d{2}\b"), "[CNPJ]"),
     # CPF com a máscara inteira, parcial ou nenhuma (123.456.789-09, 123456789-09...).
     (re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"), "[CPF]"),

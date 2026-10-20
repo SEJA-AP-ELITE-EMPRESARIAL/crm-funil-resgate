@@ -59,7 +59,7 @@ const CHAVE_SENSIVEL = new RegExp(
   [
     "senha|password|passwd|pwd|secret|segredo|token|authori[sz]ation|auth|cookie|",
     "session|sessao|sessão|csrf|chave|api[_-]?key|app[_-]?key|jwt|dsn|signature|assinatura|",
-    "cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|",
+    "cpf|cnpj|e-?mail|telefone|celular|phone|fone|whats|first_name|last_name|full_name|username|",
     "nome|razao|razão|contato|responsavel|responsável|indicador|consultor|empresa|",
     "endereco|endereço|munic|notas|observa|motivo",
   ].join(""),
@@ -81,9 +81,16 @@ const NOMES_SENSIVEIS = CHAVE_SENSIVEL.source;
 const CHAVE_ENTRE_ASPAS = `(?:"[^"\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^"\\n]{0,64}?"|'[^'\\n]{0,64}?(?:${NOMES_SENSIVEIS})[^'\\n]{0,64}?')`;
 const VALOR_ASPAS_DUPLAS = `b?"(?:[^"\\\\]|\\\\.)*(?:"|\\\\?$)`;
 const VALOR_ASPAS_SIMPLES = `b?'(?:[^'\\\\]|\\\\.)*(?:'|\\\\?$)`;
-// Valor sem aspas: vai até o separador ou até a próxima `chave=`/`chave:`, e leva
-// junto as palavras soltas no meio (`nome=Padaria Pao Quente etapa=x`).
-const VALOR_SEM_ASPAS = `[^&\\s"'()\\[\\],;]+(?:[ \\t]+(?![\\w-]{1,40}[ \\t]{0,3}[:=])[^&\\s"'()\\[\\],;]+)*`;
+// Lista ou objeto como valor ({'nome': ['Padaria'], "responsavel": {...}}): sai
+// até o fecho, ou até 2000 caracteres e o fim da linha (sem fecho, sem backtracking).
+const VALOR_LISTA_OU_OBJETO = "(?:\\[[^\\]\\n]{0,2000}\\]?|\\{[^\\}\\n]{0,2000}\\}?)";
+// Letra, número ou _, com acento: o `\w` do JS é só ASCII, e a chave pode ser
+// `observação` ou `município` (no Python o `\w` já é assim).
+const LETRA = "[\\p{L}\\p{N}_]";
+// Valor sem aspas: vai até o fim da linha ou até a próxima `chave=`/`chave:`
+// (depois de espaço, vírgula, ponto e vírgula ou &). Aspas, apóstrofo, parêntese,
+// vírgula e & no meio são do valor (razão social, `notas` em texto livre).
+const VALOR_SEM_ASPAS = `(?:(?![,;&\\s][ \\t]{0,3}[\\p{L}\\p{N}_-]{1,40}[ \\t]{0,3}[:=])[^\\n])+`;
 
 // Só para texto que não é código: nas linhas de código dos frames, `senha = ...`
 // é nome de variável, e a máscara o estragaria.
@@ -95,13 +102,15 @@ const MASCARAS_DE_CHAVE = [
   // com o corte logo depois da barra de um escape.
   [new RegExp(`(${CHAVE_ENTRE_ASPAS}\\s*:\\s*)${VALOR_ASPAS_DUPLAS}`, "gi"), '$1"[Filtrado]"'],
   [new RegExp(`(${CHAVE_ENTRE_ASPAS}\\s*:\\s*)${VALOR_ASPAS_SIMPLES}`, "gi"), "$1'[Filtrado]'"],
+  [new RegExp(`(${CHAVE_ENTRE_ASPAS}\\s*:\\s*)${VALOR_LISTA_OU_OBJETO}`, "gi"), "$1[Filtrado]"],
   // Formulário, query, argumento nomeado e texto de log: senha=..., nome='...',
   // `senha: ...`, `password = ...`, `Authorization: Basic ...`.
   [
     new RegExp(
-      `(\\b\\w{0,40}?(?:${NOMES_SENSIVEIS})\\w{0,40}?[ \\t]{0,3}[:=][ \\t]{0,3})` +
-        `(?:b?'(?:[^'\\\\\\n]|\\\\.)*(?:'|$)|b?"(?:[^"\\\\\\n]|\\\\.)*(?:"|$)|${VALOR_SEM_ASPAS})`,
-      "gi",
+      `((?<!${LETRA})${LETRA}{0,40}?(?:${NOMES_SENSIVEIS})${LETRA}{0,40}?[ \\t]{0,3}[:=][ \\t]{0,3})` +
+        `(?:b?'(?:[^'\\\\\\n]|\\\\.)*(?:'|$)|b?"(?:[^"\\\\\\n]|\\\\.)*(?:"|$)|` +
+        `${VALOR_LISTA_OU_OBJETO}|${VALOR_SEM_ASPAS})`,
+      "giu",
     ),
     "$1[Filtrado]",
   ],
@@ -116,7 +125,7 @@ const MASCARAS_DE_DADO = [
   // valor do `Key (coluna)=(valor)` some e a coluna fica.
   [/DETAIL:[\s\S]*/g, "DETAIL: [Filtrado]"],
   [/Failing row contains \([\s\S]*/g, "Failing row contains ([Filtrado])"],
-  [/(\bKey \([^)]*\))=\((?:[^()]|\([^()]*(?:\)|$))*(?:\)|$)/g, "$1=([Filtrado])"],
+  [/(\bKey \([^)]{0,200}\))=\((?:[^()]|\([^()]*(?:\)|$))*(?:\)|$)/g, "$1=([Filtrado])"],
   // O repr de um Cliente no backend é o nome do lead.
   [/<(Cliente|User|VinculoIdentidade|ApiKey): [^<>\n]{0,200}(?:>|$)/g, "<$1: [Filtrado]>"],
   [/\bbearer\s+[^\s,;"']+/gi, "Bearer [token]"],
@@ -130,9 +139,10 @@ const MASCARAS_DE_DADO = [
   [/[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,24}/g, "[e-mail]"],
   // CNPJ numérico com a máscara inteira, parcial ou nenhuma.
   [/\b\d{2}\.?\d{3}\.?\d{3}[/.]?\d{4}-?\d{2}\b/g, "[CNPJ]"],
-  // CNPJ alfanumérico, em maiúsculas ou minúsculas; sem máscara, com um dígito nas
+  // CNPJ alfanumérico, em maiúsculas ou minúsculas. Sem máscara, com um dígito nas
   // 12 primeiras posições (não pega `handleSubmit01`).
-  [/\b[A-Z0-9]{2}\.[A-Z0-9]{3}\.[A-Z0-9]{3}\/[A-Z0-9]{4}-\d{2}\b/gi, "[CNPJ]"],
+  // Com máscara inteira ou parcial: pelo menos um separador (., / ou -).
+  [/\b(?=[A-Z0-9]{2,14}[./-])[A-Z0-9]{2}\.?[A-Z0-9]{3}\.?[A-Z0-9]{3}[/.]?[A-Z0-9]{4}-?\d{2}\b/gi, "[CNPJ]"],
   [/\b(?=[A-Z0-9]{0,11}\d)[A-Z0-9]{12}\d{2}\b/gi, "[CNPJ]"],
   // CPF com a máscara inteira, parcial ou nenhuma.
   [/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[CPF]"],
