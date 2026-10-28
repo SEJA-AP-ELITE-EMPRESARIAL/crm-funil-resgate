@@ -35,8 +35,9 @@ apps/crm/
 │   ├── test_api_key.py       # 19 testes (integração externa)
 │   ├── test_etapas.py        # 21 testes (colunas por funil + migração de dados)
 │   ├── test_funis.py         # 22 testes (CRUD de funis)
-│   └── test_login_central.py # 23 testes (Conecta ID)
-├── authentication.py    # ApiKeyAuthentication
+│   ├── test_login_central.py # login pelo Conecta ID
+│   └── test_sessao_central.py # cliente 1.5.3: manutenção e sessão aberta (TSK-1240)
+├── authentication.py    # JWTRevalidado, RenovacaoRevalidada e ApiKeyAuthentication
 ├── permissions.py       # HasApiScope (leitura × escrita)
 ├── throttling.py        # ApiKeyRateThrottle (cota por chave)
 ├── pagination.py        # paginação opt-in de clientes

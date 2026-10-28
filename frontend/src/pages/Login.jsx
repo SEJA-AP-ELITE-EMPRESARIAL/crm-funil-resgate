@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import ConstructionRoundedIcon from "@mui/icons-material/ConstructionRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
 import {
   Alert,
   Box,
@@ -13,6 +15,44 @@ import { Link as RotaLink, useNavigate } from "react-router-dom";
 
 import logoSejaAp from "@/assets/logo-sejaap.png";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatarPrevisao } from "@/lib/manutencao";
+
+// Dourado é cor de letra: o claro do tema no escuro, o escuro no claro.
+const DOURADO = (t) => (t.palette.mode === "dark" ? t.palette.primary.main : t.palette.primary.dark);
+
+/**
+ * O login central em manutenção (TSK-1240): no lugar do formulário, o aviso
+ * publicado no Conecta e a previsão de volta, se houver. "Tentar de novo"
+ * devolve o formulário; o Conecta é que diz se a manutenção acabou.
+ */
+function EmManutencao({ mensagem, previsao, aoTentarDeNovo }) {
+  const quando = formatarPrevisao(previsao);
+  return (
+    <Box role="status" aria-labelledby="manutencao-titulo" sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <ConstructionRoundedIcon aria-hidden="true" sx={{ fontSize: 32, color: DOURADO }} />
+      <Box>
+        <Typography id="manutencao-titulo" variant="h6" component="h1">
+          Temporariamente indisponível
+        </Typography>
+        <Typography variant="body2" sx={{ color: DOURADO, fontWeight: 600 }}>
+          Em manutenção
+        </Typography>
+      </Box>
+      <Typography variant="body2" color="text.secondary">
+        {mensagem || "O login está em manutenção. Volte em instantes."}
+      </Typography>
+      {quando && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <ScheduleRoundedIcon aria-hidden="true" fontSize="small" sx={{ color: DOURADO }} />
+          <Typography variant="body2">Previsão de volta: {quando}</Typography>
+        </Box>
+      )}
+      <Button variant="outlined" onClick={aoTentarDeNovo} sx={{ mt: 1, py: 1.2, fontWeight: 600 }}>
+        Tentar de novo
+      </Button>
+    </Box>
+  );
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -21,6 +61,8 @@ export default function Login() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // `{ mensagem, previsao }` com o login central em manutenção; `null` no resto.
+  const [manutencao, setManutencao] = useState(null);
 
   useEffect(() => {
     if (!loading && isAuthenticated) navigate("/", { replace: true });
@@ -37,6 +79,7 @@ export default function Login() {
     const res = await login(email.trim(), senha);
     setEnviando(false);
     if (res.success) navigate("/", { replace: true });
+    else if (res.manutencao) setManutencao(res.manutencao);
     else setErro(res.error);
   }
 
@@ -64,6 +107,14 @@ export default function Login() {
             bgcolor: (t) => t.palette.surface.elevated,
           }}
         >
+          {manutencao ? (
+            <EmManutencao
+              mensagem={manutencao.mensagem}
+              previsao={manutencao.previsao}
+              aoTentarDeNovo={() => setManutencao(null)}
+            />
+          ) : (
+          <>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Acesse com seu e-mail e senha cadastrados.
           </Typography>
@@ -120,6 +171,8 @@ export default function Login() {
               Cadastros são gerenciados pelo administrador.
             </Typography>
           </Box>
+          </>
+          )}
         </Paper>
       </Box>
     </Box>

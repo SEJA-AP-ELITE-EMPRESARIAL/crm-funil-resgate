@@ -12,10 +12,10 @@ funcionar — daí estes três caminhos.
 
 ## O que o CRM NÃO faz
 
-Gerar link de definição de senha **e receber o token**. O serviço só devolve o
-token para aplicações com `pode_gerir_identidades`, e essa é só o kanban. Não é
-limitação acidental: ter o token em mãos é poder sobre a conta de outra pessoa,
-e esse poder mora num lugar só, de propósito.
+Gerar link de definição de senha **e receber o token**. Desde o cliente 1.5
+(login central no Conecta, TSK-1221) nenhum app recebe token de senha, nem o
+kanban: ter o token em mãos é poder sobre a conta de outra pessoa, e esse poder
+fica no Conecta. Criar login e conceder acesso também é só no /admin do Conecta.
 
 O que o CRM ganhou em 28/08/2026 foi `pedir_link`, que é outra coisa: ele manda
 o Conecta ID **enviar** o link por e-mail, para o endereço da própria pessoa. O
@@ -26,9 +26,11 @@ ficar aberta a um app comum enquanto a outra continua fechada.
 Espelhado de `conecta-kanban/apps/contas/identidade_senha.py`.
 """
 from identidade_client import (
+    BloqueadoTemporariamente,
     ClienteIdentidade,
     CredencialInvalida,
     ErroIdentidade,
+    IdentidadeEmManutencao,
     IdentidadeIndisponivel,
     SenhaFraca,
     TokenInvalido,
@@ -88,8 +90,10 @@ def pedir_link(email):
 
 
 __all__ = [
+    "BloqueadoTemporariamente",
     "CredencialInvalida",
     "ErroIdentidade",
+    "IdentidadeEmManutencao",
     "IdentidadeIndisponivel",
     "SenhaFraca",
     "TokenInvalido",

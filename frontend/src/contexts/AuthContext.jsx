@@ -4,6 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
+import { lerManutencao } from "@/lib/manutencao";
 import api, { clearTokens, getAccessToken, setTokens } from "@/services/api";
 
 const AuthCtx = createContext({
@@ -56,6 +57,10 @@ export function AuthProvider({ children }) {
       setUser(me.data);
       return { success: true, user: me.data };
     } catch (error) {
+      // O login central em manutenção tem tela própria (TSK-1240), e não a
+      // faixa de erro: a pessoa não errou nada e não adianta tentar já.
+      const manutencao = lerManutencao(error);
+      if (manutencao) return { success: false, manutencao };
       const status = error.response?.status;
       const msg =
         status === 401

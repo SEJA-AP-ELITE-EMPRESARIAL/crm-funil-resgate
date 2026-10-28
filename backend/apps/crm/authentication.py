@@ -1,5 +1,24 @@
 """
-Autenticação por chave de API (integração externa).
+Autenticação do CRM: o JWT do front, conferido no login central, e a chave de API.
+
+## JWT revalidado (TSK-1240)
+
+Desativar a pessoa no Conecta, ou tirar dela o acesso ao CRM, derruba a sessão
+já aberta. O `identidade_client.revalidar_sessao` pergunta ao Conecta no máximo
+a cada 5 minutos por usuário e só devolve False com uma resposta clara de que a
+identidade não vale mais aqui: Conecta fora do ar ou em manutenção nunca
+derruba ninguém. A conferência fica em dois pontos, os do cabeçalho do cliente:
+
+- `JWTRevalidado`, a cada requisição: só na renovação não bastaria, porque o
+  access dura 4 horas (`SIMPLE_JWT`);
+- `RenovacaoRevalidada`, na renovação: o `TokenRefreshSerializer` do simplejwt
+  5.3 não olha o usuário, e sem ela o front renovaria sem parar um token que a
+  requisição seguinte recusa.
+
+A conta de serviço da chave de API (`integracao`) não tem vínculo com o login
+central, e a `revalidar_sessao` a deixa passar sem perguntar nada.
+
+## Chave de API (integração externa)
 
 Convive com o JWT: entra depois dele em DEFAULT_AUTHENTICATION_CLASSES e devolve
 None quando o request não traz chave, deixando o front seguir com `Bearer`.
@@ -12,10 +31,56 @@ Aceita dois formatos, equivalentes:
 Em caso de sucesso, `request.user` vira o usuário vinculado à chave e
 `request.auth` a própria ApiKey — é assim que HasApiScope e o throttle a enxergam.
 """
+from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
+import identidade_client
 from apps.crm.models import ApiKey
+
+#: O que o front recebe quando o login central recusa a sessão já aberta.
+SESSAO_ENCERRADA = "Sessão encerrada. Entre de novo."
+
+
+class JWTRevalidado(JWTAuthentication):
+    """O JWT de sempre, e a identidade conferida no Conecta (ver o topo do módulo)."""
+
+    def get_user(self, validated_token):
+        usuario = super().get_user(validated_token)
+        if not identidade_client.revalidar_sessao(usuario):
+            raise AuthenticationFailed(SESSAO_ENCERRADA, code="user_inactive")
+        return usuario
+
+
+class RenovacaoRevalidada(TokenRefreshSerializer):
+    """A renovação do token só sai para a sessão que ainda vale.
+
+    A conferência vem ANTES do `super().validate()`, que é quem monta o access
+    novo. Conta apagada ou desativada aqui também não renova: o serializer do
+    simplejwt 5.3 não olha nem isso.
+    """
+
+    def validate(self, attrs):
+        refresh = self.token_class(attrs["refresh"])
+        usuario = (
+            get_user_model()
+            .objects.filter(
+                **{jwt_settings.USER_ID_FIELD: refresh.get(jwt_settings.USER_ID_CLAIM)}
+            )
+            .first()
+        )
+        if (
+            usuario is None
+            or not usuario.is_active
+            or not identidade_client.revalidar_sessao(usuario)
+        ):
+            raise InvalidToken(SESSAO_ENCERRADA)
+        return super().validate(attrs)
+
 
 PALAVRA_CHAVE = "Api-Key"
 

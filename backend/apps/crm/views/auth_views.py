@@ -26,6 +26,25 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
+def _em_manutencao(erro):
+    """503 do login central em manutenção, com o aviso e a previsão (TSK-1240).
+
+    `erro` é a `IdentidadeEmManutencao` do cliente. Ela é uma
+    `IdentidadeIndisponivel`, então quem a captura vem ANTES. O `detail` repete
+    o aviso para as telas que só leem esse campo (senha) dizerem a mesma coisa.
+    """
+    mensagem = erro.mensagem or ""
+    return Response(
+        {
+            "erro": "manutencao",
+            "mensagem": mensagem,
+            "previsao": erro.previsao and erro.previsao.isoformat(),
+            "detail": " ".join(filter(None, ["O login está em manutenção.", mensagem])),
+        },
+        status=503,
+    )
+
+
 class LoginPorEmailSerializer(TokenObtainPairSerializer):
     """Login por e-mail, verificado no Conecta ID.
 
@@ -88,12 +107,21 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         senha — e vem uma enxurrada de trocas que não resolve nada, com o
         suporte procurando o problema no lugar errado.
         """
-        from identidade_client import BloqueadoTemporariamente, IdentidadeIndisponivel
+        from identidade_client import (
+            BloqueadoTemporariamente,
+            IdentidadeEmManutencao,
+            IdentidadeIndisponivel,
+        )
 
         try:
             return super().post(request, *args, **kwargs)
         except BloqueadoTemporariamente as erro:
             return Response({"detail": str(erro)}, status=429)
+        except IdentidadeEmManutencao as erro:
+            # Antes da IdentidadeIndisponivel, que é a mãe dela: a tela diz
+            # "em manutenção", e não "tente em instantes".
+            logger.info("login em manutenção: %s", erro)
+            return _em_manutencao(erro)
         except IdentidadeIndisponivel as erro:
             logger.error("login indisponível: %s", erro)
             return Response(
@@ -179,6 +207,10 @@ def trocar_senha(request):
         return Response({"senha_atual": "Senha atual incorreta."}, status=400)
     except identidade_senha.SenhaFraca as erro:
         return Response({"nova_senha": str(erro)}, status=400)
+    except identidade_senha.BloqueadoTemporariamente as erro:
+        return Response({"detail": str(erro)}, status=429)
+    except identidade_senha.IdentidadeEmManutencao as erro:
+        return _em_manutencao(erro)
     except identidade_senha.IdentidadeIndisponivel:
         return Response(
             {"detail": "Não foi possível trocar a senha agora. Tente em instantes."},
@@ -199,7 +231,7 @@ def trocar_senha(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def definir_senha(request):
-    """POST /api/crm/senha/definir/ — consome o link gerado no kanban.
+    """POST /api/crm/senha/definir/ — consome o link que o Conecta mandou por e-mail.
 
     Público de propósito: é o caminho de quem **não consegue entrar**. A prova é
     o token de uso único, e quem o valida é o Conecta ID.
@@ -224,6 +256,8 @@ def definir_senha(request):
         )
     except identidade_senha.SenhaFraca as erro:
         return Response({"nova_senha": str(erro)}, status=400)
+    except identidade_senha.IdentidadeEmManutencao as erro:
+        return _em_manutencao(erro)
     except identidade_senha.IdentidadeIndisponivel:
         return Response(
             {"detail": "Não foi possível definir a senha agora. Tente em instantes."},
@@ -264,6 +298,9 @@ def esqueci_senha(request):
 
     try:
         identidade_senha.pedir_link(email)
+    except identidade_senha.IdentidadeEmManutencao as erro:
+        # Também é estado do serviço, igual para qualquer e-mail.
+        return _em_manutencao(erro)
     except identidade_senha.ErroIdentidade:
         # Larga de propósito: nesta rota o serviço não devolve erro sobre a
         # conta, então tudo que chega aqui é infraestrutura (serviço fora,
