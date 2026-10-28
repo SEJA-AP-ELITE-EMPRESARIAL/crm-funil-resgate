@@ -308,6 +308,22 @@ class SessaoDoAdminTest(TestCase):
         self.assertEqual(self.client.get("/admin/").status_code, 200)
 
     @patch("identidade_client.ClienteIdentidade.obter")
+    @patch("identidade_client.ClienteIdentidade.verificar")
+    def test_login_pelo_formulario_do_admin_nao_cai_na_recusa_antiga(self, verificar, obter):
+        """O login aceito no /admin/login/ apaga a recusa: o middleware não o derruba."""
+        obter.return_value = {"identidade_id": IDENTIDADE, "ativo": False}
+        self.assertEqual(self.client.get("/admin/").status_code, 302)  # recusa guardada
+
+        verificar.return_value = resposta_do_servico(self.ana)
+        r = self.client.post(
+            "/admin/login/?next=/admin/", {"username": "ana@x.com", "password": SENHA}
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/admin/")
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+        self.assertEqual(obter.call_count, 1)
+
+    @patch("identidade_client.ClienteIdentidade.obter")
     def test_conecta_fora_do_ar_nao_derruba_o_admin(self, obter):
         obter.side_effect = IdentidadeIndisponivel("fora do ar")
         self.assertEqual(self.client.get("/admin/").status_code, 200)

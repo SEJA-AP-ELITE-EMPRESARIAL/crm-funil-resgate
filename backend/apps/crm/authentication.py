@@ -56,6 +56,11 @@ def revalidar_sessao_middleware(get_response):
     Logo depois do `AuthenticationMiddleware` (`MIDDLEWARE` no settings). As
     requisições do front, que vêm com `Bearer` e sem a sessão, chegam aqui como
     anônimas e passam direto: quem as confere é o `JWTRevalidado`.
+
+    Limite conhecido do cliente com o LocMem (o CRM não configura `CACHES`, e o
+    gunicorn sobe 3 workers): quem foi reativado e entra pelo /admin/ em menos
+    de 5 minutos pode cair num worker que ainda guarda a recusa e voltar à tela
+    de login, até esse cache vencer.
     """
 
     def middleware(request):

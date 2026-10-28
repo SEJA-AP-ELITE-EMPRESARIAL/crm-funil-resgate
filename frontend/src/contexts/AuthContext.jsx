@@ -57,15 +57,18 @@ export function AuthProvider({ children }) {
         const me = await api.get("/api/crm/me/");
         setUser(me.data);
         return { success: true, user: me.data };
-      } catch {
-        // A senha conferiu: o que falhou foi abrir a sessão. Acontece quando
-        // outro worker do gunicorn ainda guarda a recusa de antes de a pessoa
-        // ser reativada (até 5 minutos, TSK-1240). Dizer "senha incorreta"
-        // aqui mandaria trocar uma senha que está certa.
+      } catch (erroMe) {
+        // A senha conferiu: o que falhou foi abrir a sessão, e dizer "senha
+        // incorreta" aqui mandaria trocar uma senha que está certa. O 401 é o
+        // worker do gunicorn que ainda guarda a recusa de antes de a pessoa ser
+        // reativada (até 5 minutos, TSK-1240); o resto (rede, 500) passa já.
         clearTokens();
+        const recusada = erroMe.response?.status === 401;
         return {
           success: false,
-          error: "Sua senha conferiu, mas a sessão não abriu agora. Tente de novo em alguns minutos.",
+          error: recusada
+            ? "Sua senha conferiu, mas a sessão não abriu agora. Tente de novo em alguns minutos."
+            : "Sua senha conferiu, mas a sessão não abriu. Tente novamente.",
         };
       }
     } catch (error) {
