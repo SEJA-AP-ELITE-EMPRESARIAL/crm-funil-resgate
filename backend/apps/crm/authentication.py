@@ -7,16 +7,20 @@ Desativar a pessoa no Conecta, ou tirar dela o acesso ao CRM, derruba a sessão
 já aberta. O `identidade_client.revalidar_sessao` pergunta ao Conecta no máximo
 a cada 5 minutos por usuário e só devolve False com uma resposta clara de que a
 identidade não vale mais aqui: Conecta fora do ar ou em manutenção nunca
-derruba ninguém. A conferência fica em dois pontos, os do cabeçalho do cliente:
+derruba ninguém. A conferência fica em três pontos, os do cabeçalho do cliente:
 
 - `JWTRevalidado`, a cada requisição: só na renovação não bastaria, porque o
   access dura 4 horas (`SIMPLE_JWT`);
 - `RenovacaoRevalidada`, na renovação: o `TokenRefreshSerializer` do simplejwt
   5.3 não olha o usuário, e sem ela o front renovaria sem parar um token que a
-  requisição seguinte recusa.
+  requisição seguinte recusa;
+- `revalidar_sessao_middleware`, na sessão do Django: é a do `/admin/`, onde um
+  staff desligado no Conecta continuaria pelas duas semanas do cookie, podendo
+  até emitir uma chave de API para si.
 
-A conta de serviço da chave de API (`integracao`) não tem vínculo com o login
-central, e a `revalidar_sessao` a deixa passar sem perguntar nada.
+A chave de API **não** passa por aqui, de propósito (TSK-1240: "não mexer na
+`ApiKey`"): ela é revogada no `/admin/crm/apikey/`, e não no Conecta. Uma chave
+cujo dono é uma pessoa desligada no Conecta continua valendo até ser revogada.
 
 ## Chave de API (integração externa)
 
@@ -31,7 +35,7 @@ Aceita dois formatos, equivalentes:
 Em caso de sucesso, `request.user` vira o usuário vinculado à chave e
 `request.auth` a própria ApiKey — é assim que HasApiScope e o throttle a enxergam.
 """
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -44,6 +48,22 @@ from apps.crm.models import ApiKey
 
 #: O que o front recebe quando o login central recusa a sessão já aberta.
 SESSAO_ENCERRADA = "Sessão encerrada. Entre de novo."
+
+
+def revalidar_sessao_middleware(get_response):
+    """Encerra a sessão do Django (a do `/admin/`) que o login central recusa.
+
+    Logo depois do `AuthenticationMiddleware` (`MIDDLEWARE` no settings). As
+    requisições do front, que vêm com `Bearer` e sem a sessão, chegam aqui como
+    anônimas e passam direto: quem as confere é o `JWTRevalidado`.
+    """
+
+    def middleware(request):
+        if request.user.is_authenticated and not identidade_client.revalidar_sessao(request.user):
+            logout(request)
+        return get_response(request)
+
+    return middleware
 
 
 class JWTRevalidado(JWTAuthentication):

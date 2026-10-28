@@ -5,7 +5,8 @@ Serve para conferir, depois de um deploy, que o erro chega ao GlitchTip
 (projeto `crm`) com o release igual ao commit da imagem: a rota termina em 500
 e o SDK manda o evento. Sem SENTRY_DSN, só devolve o 500.
 
-Só superusuário, e só com o JWT do login (`Authorization: Bearer ...`): chave de
+Só superusuário, e só com o JWT do login (`Authorization: Bearer ...`, conferido
+no login central como em toda a API): chave de
 API não serve, nem a de um superusuário, porque integração não tem o que
 diagnosticar aqui. Qualquer outra conta leva 403 sem a exceção acontecer, para
 que ninguém mais consiga encher o GlitchTip. POST, e não GET, para um link ou um
@@ -21,7 +22,8 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
-from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from apps.crm.authentication import JWTRevalidado
 
 
 class ErroDeTesteDoGlitchTip(RuntimeError):
@@ -42,7 +44,8 @@ class LimiteDoErroDeTeste(UserRateThrottle):
 
 
 @api_view(["POST"])
-@authentication_classes([JWTAuthentication])
+# O JWT revalidado (TSK-1240): o superusuário desligado no Conecta não dispara.
+@authentication_classes([JWTRevalidado])
 @permission_classes([IsAuthenticated, SoSuperusuario])
 @throttle_classes([LimiteDoErroDeTeste])
 def erro_de_teste(request):

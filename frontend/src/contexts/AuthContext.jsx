@@ -53,9 +53,21 @@ export function AuthProvider({ children }) {
         password: senha,
       });
       setTokens({ access: data.access, refresh: data.refresh });
-      const me = await api.get("/api/crm/me/");
-      setUser(me.data);
-      return { success: true, user: me.data };
+      try {
+        const me = await api.get("/api/crm/me/");
+        setUser(me.data);
+        return { success: true, user: me.data };
+      } catch {
+        // A senha conferiu: o que falhou foi abrir a sessão. Acontece quando
+        // outro worker do gunicorn ainda guarda a recusa de antes de a pessoa
+        // ser reativada (até 5 minutos, TSK-1240). Dizer "senha incorreta"
+        // aqui mandaria trocar uma senha que está certa.
+        clearTokens();
+        return {
+          success: false,
+          error: "Sua senha conferiu, mas a sessão não abriu agora. Tente de novo em alguns minutos.",
+        };
+      }
     } catch (error) {
       // O login central em manutenção tem tela própria (TSK-1240), e não a
       // faixa de erro: a pessoa não errou nada e não adianta tentar já.

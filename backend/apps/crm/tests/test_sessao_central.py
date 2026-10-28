@@ -20,7 +20,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import Client, TestCase
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -34,7 +34,12 @@ from apps.crm.tests.test_login_central import (
     TOKEN,
     resposta_do_servico,
 )
-from identidade_client import IdentidadeEmManutencao, IdentidadeIndisponivel, NaoEncontrado
+from identidade_client import (
+    BloqueadoTemporariamente,
+    IdentidadeEmManutencao,
+    IdentidadeIndisponivel,
+    NaoEncontrado,
+)
 
 User = get_user_model()
 
@@ -130,6 +135,18 @@ class ManutencaoTest(TestCase):
         self.conferir_manutencao(r)
 
     @patch("identidade_client.ClienteIdentidade.trocar_senha")
+    def test_trocar_senha_bloqueada_vira_429(self, trocar):
+        trocar.side_effect = BloqueadoTemporariamente("Tente em 15 minutos.")
+        self.client.force_authenticate(self.ana)
+        r = self.client.post(
+            "/api/crm/senha/",
+            {"senha_atual": SENHA, "nova_senha": "Nova#Senha123"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(r.data["detail"], "Tente em 15 minutos.")
+
+    @patch("identidade_client.ClienteIdentidade.trocar_senha")
     def test_trocar_senha_em_manutencao(self, trocar):
         trocar.side_effect = em_manutencao()
         self.client.force_authenticate(self.ana)
@@ -189,16 +206,29 @@ class SessaoAbertaTest(TestCase):
         self.assertEqual(self.renovar().status_code, 401)
 
     @patch("identidade_client.ClienteIdentidade.obter")
-    def test_conecta_fora_do_ar_nao_derruba_ninguem(self, obter):
+    def test_conecta_fora_do_ar_nao_derruba_a_requisicao(self, obter):
         obter.side_effect = IdentidadeIndisponivel("fora do ar")
         self.assertEqual(self.com_access().status_code, 200)
-        self.assertEqual(self.renovar().status_code, 200)
+        obter.assert_called_once()
 
     @patch("identidade_client.ClienteIdentidade.obter")
-    def test_conecta_em_manutencao_nao_derruba_ninguem(self, obter):
+    def test_conecta_fora_do_ar_nao_recusa_a_renovacao(self, obter):
+        # Só a renovação, com o cache vazio: é ela quem pergunta ao Conecta.
+        obter.side_effect = IdentidadeIndisponivel("fora do ar")
+        self.assertEqual(self.renovar().status_code, 200)
+        obter.assert_called_once()
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_conecta_em_manutencao_nao_derruba_a_requisicao(self, obter):
         obter.side_effect = em_manutencao()
         self.assertEqual(self.com_access().status_code, 200)
+        obter.assert_called_once()
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_conecta_em_manutencao_nao_recusa_a_renovacao(self, obter):
+        obter.side_effect = em_manutencao()
         self.assertEqual(self.renovar().status_code, 200)
+        obter.assert_called_once()
 
     @patch("identidade_client.ClienteIdentidade.obter")
     def test_conta_desativada_aqui_nao_renova(self, obter):
@@ -232,12 +262,56 @@ class SessaoAbertaTest(TestCase):
 
     @patch("identidade_client.ClienteIdentidade.obter")
     def test_chave_de_api_nao_passa_pelo_conecta(self, obter):
-        """A conta de serviço da integração não tem vínculo: nada a perguntar."""
-        integracao = User.objects.create_user("integracao", "int@x.com", SENHA)
-        _, chave = ApiKey.gerar("n8n", integracao, escopo=EscopoApiKey.LEITURA)
+        """A chave de API não muda (TSK-1240): nem a de uma pessoa desligada no Conecta.
+
+        O dono tem vínculo e o Conecta o recusa; a chave segue valendo até ser
+        revogada no /admin/crm/apikey/, e nem pergunta ao Conecta.
+        """
+        obter.return_value = {"identidade_id": IDENTIDADE, "ativo": False}
+        _, chave = ApiKey.gerar("n8n", self.ana, escopo=EscopoApiKey.LEITURA)
         r = APIClient().get(ME, HTTP_X_API_KEY=chave)
         self.assertEqual(r.status_code, 200)
         obter.assert_not_called()
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_diagnostico_do_glitchtip_tambem_e_revalidado(self, obter):
+        """A rota que fixa a própria autenticação não escapa da revalidação."""
+        User.objects.filter(pk=self.ana.pk).update(is_superuser=True, is_staff=True)
+        obter.return_value = {"identidade_id": IDENTIDADE, "ativo": False}
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.refresh.access_token}")
+        r = self.client.post("/api/crm/diagnostico/erro-de-teste/")
+        self.assertEqual(r.status_code, 401)
+
+
+@CENTRAL_LIGADA
+class SessaoDoAdminTest(TestCase):
+    """A sessão do Django (/admin/) também cai quando o Conecta recusa a pessoa."""
+
+    def setUp(self):
+        cache.clear()
+        self.ana = User.objects.create_superuser("ana", "ana@x.com", SENHA)
+        VinculoIdentidade.objects.create(usuario=self.ana, identidade_id=IDENTIDADE)
+        self.client = Client()
+        self.client.force_login(self.ana)
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_identidade_desativada_encerra_a_sessao_do_admin(self, obter):
+        obter.return_value = {"identidade_id": IDENTIDADE, "ativo": False}
+        r = self.client.get("/admin/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/admin/login/", r["Location"])
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_identidade_ativa_segue_no_admin(self, obter):
+        obter.return_value = {"identidade_id": IDENTIDADE, "ativo": True}
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+
+    @patch("identidade_client.ClienteIdentidade.obter")
+    def test_conecta_fora_do_ar_nao_derruba_o_admin(self, obter):
+        obter.side_effect = IdentidadeIndisponivel("fora do ar")
+        self.assertEqual(self.client.get("/admin/").status_code, 200)
+        obter.assert_called_once()
 
 
 class ChaveDesligadaNaoPerguntaTest(TestCase):
