@@ -59,6 +59,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # A sessão do /admin/ cai quando o login central recusa a pessoa (TSK-1240).
+    "apps.crm.authentication.revalidar_sessao_middleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -138,8 +140,9 @@ AUTH_PASSWORD_VALIDATORS = [
 #
 # AUTH_CENTRAL_ATIVO é a chave que reverte tudo: com ela desligada o
 # BackendIdentidade sai da frente e o login volta a ser o local, sem migration e
-# sem deploy de emergência. Padrão FALSE de propósito — virar a chave antes de
-# rodar `vincular_identidades` deixaria todo mundo do lado de fora.
+# sem deploy de emergência. Padrão FALSE de propósito. Desde 04/08/2026, sem as
+# senhas locais, desligar a chave tranca todo mundo (ver ChaveDesligadaTest), e
+# desde o cliente 1.5 (TSK-1240) contas e acessos nascem no /admin do Conecta.
 AUTH_CENTRAL_ATIVO = os.environ.get("AUTH_CENTRAL_ATIVO", "False").strip().lower() in (
     "true",
     "1",
@@ -222,8 +225,9 @@ CRM_API_RATE = os.environ.get("CRM_API_RATE", "120/min")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         # JWT primeiro (front); a chave de API só reivindica o request quando
-        # o header traz "Api-Key" ou X-API-Key.
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # o header traz "Api-Key" ou X-API-Key. O JWT confere a identidade no
+        # login central a cada requisição (TSK-1240).
+        "apps.crm.authentication.JWTRevalidado",
         "apps.crm.authentication.ApiKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -265,6 +269,8 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=240),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
+    # A renovação só sai para quem o login central ainda aceita (TSK-1240).
+    "TOKEN_REFRESH_SERIALIZER": "apps.crm.authentication.RenovacaoRevalidada",
 }
 
 # === CORS ===
