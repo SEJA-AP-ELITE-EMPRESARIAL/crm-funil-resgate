@@ -219,8 +219,12 @@ if not DEBUG:
 
 # === DRF + JWT (espelha config do ConectaAP) ===
 # Taxa aplicada por chave de API (formato do DRF). Sessões JWT do front não são
-# limitadas — ver apps/crm/throttling.py.
+# limitadas — ver apps/crm/throttling.py —, fora o sinal de presença, abaixo.
 CRM_API_RATE = os.environ.get("CRM_API_RATE", "120/min")
+# Teto do sinal de presença por pessoa (TSK-1521, apps/crm/views/presenca_views.py).
+# A tela manda um por minuto por aba, mais um por troca de tela e por volta à aba.
+# O `or`: uma linha `CRM_PRESENCA_RATE=` vazia no .env daria 500 em todo sinal.
+CRM_PRESENCA_RATE = os.environ.get("CRM_PRESENCA_RATE") or "20/min"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

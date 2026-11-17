@@ -21,9 +21,11 @@ import {
   baixarModeloImportacao,
   importarClientes,
 } from "@/features/funil/services/clientesService";
+import { useDetalheDaTela } from "@/lib/useTelaAtual";
 
 export function ImportarDialog({ open, onClose }) {
   const { reload } = useClientesData();
+  useDetalheDaTela(open, "importacao"); // sinal de presença (TSK-1521)
   const [arquivo, setArquivo] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);

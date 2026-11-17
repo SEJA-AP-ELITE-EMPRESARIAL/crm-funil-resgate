@@ -1,5 +1,5 @@
 """
-Cliente 1.5.3 do login central no CRM (TSK-1240): manutenção e sessão aberta.
+Cliente do login central no CRM (TSK-1240, hoje na 1.6.0): manutenção e sessão aberta.
 
     python manage.py test apps.crm.tests.test_sessao_central
 
@@ -48,8 +48,9 @@ RENOVAR = "/api/token/refresh/"
 PREVISAO = datetime(2026, 11, 3, 22, 30, tzinfo=timezone.utc)
 AVISO = "Troca do servidor do login."
 
-#: O cliente que a TSK-1270 publicou, conferido byte a byte.
-SHA256_DO_CLIENTE = "4e2cf9fa8777814deade50b0ed35341a9a7afe2299b84378b8a37a7f1c4b09c1"
+#: O cliente 1.6.0 que a TSK-1516 publicou (o do sinal de presença), conferido
+#: byte a byte. A 1.6.0 só acrescenta `enviar_presenca` à 1.5.3.
+SHA256_DO_CLIENTE = "8c068427755586daafbe80478627b40e0360ab7461c54f272d51b1f3fbf568a1"
 
 
 def em_manutencao():
@@ -59,13 +60,13 @@ def em_manutencao():
 class ClienteCopiadoTest(TestCase):
     """O `identidade_client.py` daqui é o do Conecta, sem edição."""
 
-    def test_e_a_1_5_3_sem_edicao(self):
+    def test_e_a_1_6_0_sem_edicao(self):
         arquivo = Path(settings.BASE_DIR) / "identidade_client.py"
         # Sem `\r`: o git do Windows pode trazer o arquivo com CRLF, e o hash
         # que vale é o do blob, com LF.
         conteudo = arquivo.read_bytes().replace(b"\r\n", b"\n")
         self.assertEqual(hashlib.sha256(conteudo).hexdigest(), SHA256_DO_CLIENTE)
-        self.assertEqual(identidade_client.VERSAO, "1.5.3")
+        self.assertEqual(identidade_client.VERSAO, "1.6.0")
 
     def test_o_crm_nao_gere_identidades(self):
         """As escritas saíram do cliente na 1.5, e o CRM não chama nenhuma.

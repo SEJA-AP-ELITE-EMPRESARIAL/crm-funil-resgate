@@ -24,6 +24,7 @@ import {
   removerCliente,
 } from "@/features/funil/services/clientesService";
 import { parseValorBR } from "@/lib/format";
+import { useDetalheDaTela } from "@/lib/useTelaAtual";
 
 const VAZIO = {
   funil: "",
@@ -56,6 +57,9 @@ const PRIORIDADES = ["P1", "P2", "P3", "P4", "P5"];
 export function ClienteFormDialog({ open, onClose, cliente = null }) {
   const isEdit = !!cliente;
   const { reload, config, funis, funilSel } = useClientesData();
+  // Sinal de presença (TSK-1521): o cartão aberto é uma tela. O nome do cliente
+  // não vai junto: é dado de lead.
+  useDetalheDaTela(open, isEdit ? "cliente" : "novoCliente");
   const [form, setForm] = useState(VAZIO);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);

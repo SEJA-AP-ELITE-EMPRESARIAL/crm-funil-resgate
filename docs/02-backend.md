@@ -24,7 +24,8 @@ apps/crm/
 │   ├── funil_views.py   # CRUD dos funis (+ etapas embutidas)
 │   ├── etapa_views.py   # CRUD das colunas do Kanban
 │   ├── auth_views.py    # login (e-mail/username), /me, /config
-│   └── import_views.py  # importar + modelo .xlsx
+│   ├── import_views.py  # importar + modelo .xlsx
+│   └── presenca_views.py# sinal de presença da tela → Conecta (TSK-1521)
 ├── management/commands/
 │   ├── seed_demo.py         # usuário demo + funis (sem exemplos por padrão)
 │   ├── importar_indicados.py# importa a planilha do APN
@@ -36,7 +37,8 @@ apps/crm/
 │   ├── test_etapas.py        # 21 testes (colunas por funil + migração de dados)
 │   ├── test_funis.py         # 22 testes (CRUD de funis)
 │   ├── test_login_central.py # login pelo Conecta ID
-│   └── test_sessao_central.py # cliente 1.5.3: manutenção e sessão aberta (TSK-1240)
+│   ├── test_sessao_central.py # cliente 1.6.0 (hash e versão), manutenção e sessão aberta (TSK-1240)
+│   └── test_presenca.py       # sinal de presença: repasse, só o JWT, nada gravado (TSK-1521)
 ├── authentication.py    # JWTRevalidado, RenovacaoRevalidada e ApiKeyAuthentication
 ├── permissions.py       # HasApiScope (leitura × escrita)
 ├── throttling.py        # ApiKeyRateThrottle (cota por chave)

@@ -347,6 +347,23 @@ describe("limparRastro", () => {
     const rastro = limparRastro({ category: "xhr", data: { url: `/api/crm/clientes/?search=${EMAIL}` } });
     assert.equal(rastro.data.url, "/api/crm/clientes/");
   });
+
+  it("descarta o rastro do sinal de presença, que sai a cada minuto (TSK-1521)", () => {
+    for (const url of [
+      "/api/crm/presenca/",
+      "https://conecta-crm.sejaap.com.br/api/crm/presenca/",
+      "/api/crm/presenca/?x=1",
+    ]) {
+      assert.equal(limparRastro({ category: "xhr", data: { url, method: "POST" } }), null);
+      assert.equal(limparRastro({ category: "fetch", data: { url, method: "POST" } }), null);
+    }
+    // Só o sinal: as outras rotas e a navegação seguem no rastro.
+    assert.notEqual(limparRastro({ category: "xhr", data: { url: "/api/crm/me/" } }), null);
+    assert.notEqual(
+      limparRastro({ category: "navigation", data: { from: "/login", to: "/" } }),
+      null,
+    );
+  });
 });
 
 function sdkFalso() {
