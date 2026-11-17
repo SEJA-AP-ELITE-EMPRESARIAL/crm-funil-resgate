@@ -210,6 +210,31 @@ ao GlitchTip (projeto `crm`) com o release certo (TSK-1147). Só **superusuário
 só com o JWT do login: chave de API leva 401, outra conta leva 403 sem a exceção
 acontecer, e `GET` leva 405. Cota de 10 por hora por usuário (429 depois).
 
+## Presença
+
+### `POST /api/crm/presenca/` — sinal de presença da tela (TSK-1521)
+A tela do CRM manda um sinal por minuto com a aba aberta, na hora quando a pessoa
+troca de tela e na volta à aba; a rota repassa ao painel "Uso em tempo real" do
+Conecta pelo `identidade_client.enviar_presenca` (cliente 1.6.0), com a AppKey do
+CRM (`IDENTIDADE_APP_KEY`, a mesma do login). Nada fica gravado no CRM.
+
+```json
+// request
+{ "modulo": "Kanban", "tela": "Funil Resgate · Cliente", "ultima_interacao": "2026-11-17T14:03:12.345Z" }
+```
+
+- `tela` obrigatória; `modulo` opcional; os dois até 500 caracteres (o Conecta
+  grava 60 e 120, com reticências). `ultima_interacao` opcional, ISO 8601 **com o
+  fuso** (o `toISOString()` do navegador).
+- **Só o JWT da tela** (`Authorization: Bearer`, revalidado no login central):
+  chave de API e a sessão do `/admin/` levam **401**, e nada vai ao Conecta.
+- **204** sempre que o corpo vale, mesmo com o Conecta fora ou em manutenção;
+  **400** para o corpo que não é sinal; `GET` leva 405.
+- **20 por minuto por pessoa** (`CRM_PRESENCA_RATE`), 429 depois.
+
+O texto de cada tela (rota → módulo · tela) está em
+`frontend/src/lib/telaAtual.js`.
+
 ## Códigos de status
 
 | Código | Significado |

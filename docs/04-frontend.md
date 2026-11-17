@@ -17,8 +17,12 @@ src/
 │   └── clientesService.js   # camada de dados (chama a API)
 ├── lib/
 │   ├── stages.js            # helpers das etapas (a lista vem da API)
-│   └── format.js            # fmtBRL, parseValorBR, num
+│   ├── format.js            # fmtBRL, parseValorBR, num
+│   ├── presenca.js          # sinal de presença: relógio + pedido (TSK-1521)
+│   ├── telaAtual.js         # texto de cada tela (rota → módulo · tela)
+│   └── useTelaAtual.js      # hooks com que a página e as janelas dizem onde a pessoa está
 ├── components/
+│   ├── SinalDePresenca.jsx  # liga o sinal à sessão e à rota (montado no App.jsx)
 │   ├── auth/PrivateRoute.jsx
 │   └── funil/
 │       ├── KanbanBoard.jsx      # board drag-and-drop (@dnd-kit)
@@ -74,6 +78,30 @@ Sem Redux/React Query — **Context API** (padrão ConectaAP):
 `atualizarCliente`, `removerCliente`, `listarFunis`, `criarFunil`,
 `atualizarFunil`, `removerFunil`, `criarEtapa`, `atualizarEtapa`, `removerEtapa`,
 `reordenarEtapas`, `obterConfig`, `importarClientes`, `baixarModeloImportacao`).
+
+## Sinal de presença (TSK-1521)
+
+O painel "Uso em tempo real" do Conecta (só SuperAdmin) mostra quem está online
+no CRM e em qual tela. O `SinalDePresenca` (no `App.jsx`, fora das rotas) manda
+ao backend (`POST /api/crm/presenca/`, ver [03](03-api.md)):
+
+- um sinal por minuto com a aba aberta, também em segundo plano;
+- um na troca de tela, depois de 500 ms (o redirecionamento gera um só), e um na
+  volta à aba se o último saiu há 30 s ou mais;
+- com a tela em texto curto (`lib/telaAtual.js`: a aba é o módulo, o funil e a
+  janela aberta são a tela; o nome do cliente não vai) e o momento da última
+  interação (clique, tecla, roda/toque, Voltar/Avançar).
+
+Só manda logado e em tela interna: a tela de login, as de senha públicas e a rota
+desconhecida ficam caladas, e o `/admin/` do Django nem carrega o front. O erro do
+sinal nunca aparece: sem aviso, sem nova tentativa, e o pedido passa longe do
+interceptor de 401 (`validateStatus`), então não renova nem encerra a sessão; o
+access recusado (401) não é mandado de novo até o token mudar. O GlitchTip
+descarta o rastro do sinal. Testes no `npm test` (`lib/presenca.test.js`,
+`lib/telaAtual.test.js`) e e2e em `e2e/rodar-presenca.sh` (ver o README).
+
+Uma janela nova que conte como tela: um código em `DETALHES` (`telaAtual.js`) e
+`useDetalheDaTela(open, "codigo")` no componente dela.
 
 ## Telas
 

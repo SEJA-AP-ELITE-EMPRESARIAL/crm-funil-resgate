@@ -74,7 +74,9 @@ isolamento por usuário, então uma chave de escrita alcança a carteira inteira
 ## Limites e erros
 
 Rate limit **por chave** (a cota de uma integração não afeta a outra), configurável
-em `CRM_API_RATE` (default `120/min`). Sessões JWT do front não são limitadas.
+em `CRM_API_RATE` (default `120/min`). Sessões JWT do front não são limitadas, fora o sinal de presença da tela
+(`CRM_PRESENCA_RATE`, 20/min por pessoa). A chave de API não manda sinal de
+presença: a rota `POST /api/crm/presenca/` só aceita o JWT da tela (TSK-1521).
 
 | Código | Situação |
 |--------|----------|

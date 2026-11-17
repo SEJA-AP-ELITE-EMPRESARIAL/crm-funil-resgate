@@ -117,6 +117,7 @@ crm-funil-resgate/
 | GET/POST | `/api/crm/clientes/` | Lista (base compartilhada) / cria |
 | GET/PATCH/DELETE | `/api/crm/clientes/{id}/` | Detalha / atualiza (ex.: mover etapa) / remove |
 | POST | `/api/crm/diagnostico/erro-de-teste/` | Superusuário: exceção de propósito para conferir o GlitchTip |
+| POST | `/api/crm/presenca/` | Sinal de presença da tela (só o JWT), repassado ao painel "Uso em tempo real" do Conecta (TSK-1521) |
 
 ### Integração externa (n8n, ConectaAP, terceiros)
 
@@ -138,9 +139,20 @@ e aplicações) em [`docs/11-api-guia-completo.md`](docs/11-api-guia-completo.md
 ## Testes
 
 ```bash
-cd backend && python manage.py test apps.crm     # 184 testes
-cd frontend && npm test                            # GlitchTip e scripts do build (node --test)
+cd backend && python manage.py test apps.crm     # 211 testes
+cd frontend && npm test                            # GlitchTip, sinal de presença e scripts do build (node --test)
 cd frontend && npm run build                       # valida a compilação
+```
+
+E2E do sinal de presença (TSK-1521): a tela real no Chromium do Playwright, o
+backend local (SQLite descartável) e um Conecta falso. Sobe os três em 127.0.0.1
+(portas 41525–41527, ou `PORTA_CONECTA`/`PORTA_BACK`/`PORTA_FRONT`), exige cada
+porta livre antes de subir, derruba tudo ao sair e grava os prints em
+`docs/telas/tsk-1521/`:
+
+```bash
+cd frontend && npx playwright install chromium     # só na primeira vez
+PYTHON=../backend/.venv/bin/python e2e/rodar-presenca.sh
 ```
 
 ## Deploy (produção) — Conecta_CRM na VPS
