@@ -55,8 +55,14 @@ let refreshing = null;
 async function refreshAccessToken() {
   const refresh = getRefreshToken();
   if (!refresh) throw new Error("sem refresh token");
-  // Usa axios cru para não recursar no interceptor.
-  const { data } = await axios.post(`${getApiBaseUrl()}/api/token/refresh/`, { refresh });
+  // Usa axios cru para não recursar no interceptor. Com o mesmo prazo das
+  // outras chamadas: a renovação é dividida (o sinal de presença e as ações da
+  // tela), e uma pendurada seguraria todas.
+  const { data } = await axios.post(
+    `${getApiBaseUrl()}/api/token/refresh/`,
+    { refresh },
+    { timeout: api.defaults.timeout },
+  );
   // A pessoa saiu (ou entrou outra) enquanto o refresh ia e voltava: gravar o
   // access agora a devolveria ao sistema.
   if (getRefreshToken() !== refresh) throw new Error("a sessão mudou durante a renovação");
