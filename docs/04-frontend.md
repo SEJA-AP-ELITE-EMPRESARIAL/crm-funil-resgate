@@ -97,7 +97,8 @@ desconhecida ficam caladas, e o `/admin/` do Django nem carrega o front. O erro 
 sinal nunca aparece: sem aviso, sem nova tentativa, e o pedido passa longe do
 interceptor de 401 (`validateStatus`), então nunca encerra a sessão; o access
 recusado (401) não é mandado de novo até o token mudar. A exceção é o access
-vencido (4 h) de quem está mexendo na tela (clique ou tecla nos últimos 3 min):
+vencido (4 h) de quem está mexendo na tela (alguma das interações acima, ou
+abrir a página, nos últimos 3 min):
 quem só lê o CRM não chama a API, e sumiria do painel. Para ela, o sinal renova
 o access em silêncio (`renovarAcessoEmSilencio` do `api.js`, que não sai do
 sistema na falha) e manda de novo; uma vez só entre dois sinais aceitos. A aba

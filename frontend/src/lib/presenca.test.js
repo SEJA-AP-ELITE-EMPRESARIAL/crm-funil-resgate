@@ -302,32 +302,40 @@ describe("criarSinalDePresenca", () => {
   });
 
   it("destruir tira cada ouvinte que pôs, no documento e na janela", () => {
-    // O `tela = null` do destruir já calaria o sinal: aqui se conta o que ficou pendurado.
-    const contar = (alvo) => {
-      const vivos = new Map();
-      const pos = alvo.addEventListener.bind(alvo);
-      const tirou = alvo.removeEventListener.bind(alvo);
+    // O `tela = null` do destruir já calaria o sinal: aqui se conta o que ficou
+    // pendurado. Com a regra do `EventTarget`: só sai o ouvinte do mesmo tipo,
+    // com a mesma função e a mesma `capture` com que entrou.
+    const captura = (opcoes) => (typeof opcoes === "boolean" ? opcoes : Boolean(opcoes?.capture));
+    const vigiar = (alvo) => {
+      const vivos = [];
+      const mesmo = (tipo, fn, opcoes) => (v) =>
+        v.tipo === tipo && v.fn === fn && v.captura === captura(opcoes);
       alvo.addEventListener = (tipo, fn, opcoes) => {
-        vivos.set(tipo, (vivos.get(tipo) || 0) + 1);
-        pos(tipo, fn, opcoes);
+        if (!vivos.some(mesmo(tipo, fn, opcoes))) vivos.push({ tipo, fn, captura: captura(opcoes) });
       };
       alvo.removeEventListener = (tipo, fn, opcoes) => {
-        vivos.set(tipo, (vivos.get(tipo) || 0) - 1);
-        tirou(tipo, fn, opcoes);
+        const posicao = vivos.findIndex(mesmo(tipo, fn, opcoes));
+        if (posicao >= 0) vivos.splice(posicao, 1);
       };
       return vivos;
     };
     const outroDocumento = documentoFalso();
     const outraJanela = new EventTarget();
-    const noDocumento = contar(outroDocumento);
-    const naJanela = contar(outraJanela);
+    const noDocumento = vigiar(outroDocumento);
+    const naJanela = vigiar(outraJanela);
 
     const outro = criarSinalDePresenca({ enviar, documento: outroDocumento, janela: outraJanela });
-    assert.deepEqual([...noDocumento.keys()].sort(), [...INTERACOES, "visibilitychange"].sort());
-    assert.deepEqual([...naJanela.keys()], ["popstate"]);
+    assert.deepEqual(
+      noDocumento.map((v) => v.tipo).sort(),
+      [...INTERACOES, "visibilitychange"].sort(),
+    );
+    assert.deepEqual(
+      naJanela.map((v) => v.tipo),
+      ["popstate"],
+    );
     outro.destruir();
 
-    assert.ok([...noDocumento.values(), ...naJanela.values()].every((n) => n === 0));
+    assert.deepEqual([...noDocumento, ...naJanela], []);
   });
 });
 
@@ -480,7 +488,9 @@ describe("criarEnvioDePresenca", () => {
       assert.equal(renovar.mock.callCount(), 0);
     });
 
-    it("a renovação que falha não sai do sistema nem é tentada de novo", async () => {
+    // Que a falha não tira ninguém do sistema é do `api.js` (sem `clearTokens`
+    // nem evento): quem prova é o e2e "a renovação recusada...".
+    it("a renovação que falha não é tentada de novo, nem o token recusado é mandado", async () => {
       const { estado, post, renovar, enviar } = montarComRenovacao({ renova: "erro" });
 
       assert.equal(await enviar(ATIVA()), false);
@@ -488,7 +498,6 @@ describe("criarEnvioDePresenca", () => {
       assert.equal(await enviar(ATIVA()), false);
       assert.equal(renovar.mock.callCount(), 1);
       assert.equal(post.mock.callCount(), 1);
-      assert.equal(estado.token, "token-velho");
 
       // Uma ação da pessoa renovou a sessão por fora: o sinal volta.
       estado.token = "token-da-tela";
@@ -525,6 +534,32 @@ describe("criarEnvioDePresenca", () => {
       estado.token = "token-velho";
       assert.equal(await enviar(ATIVA()), true);
       assert.equal(renovar.mock.callCount(), 2);
+    });
+
+    it("dois sinais recusados ao mesmo tempo renovam uma vez só", async () => {
+      // A troca de tela com o sinal do minuto ainda no caminho.
+      const { estado, post, renovar, enviar } = montarComRenovacao();
+      const pendentes = [];
+      post.mock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            const token = estado.token;
+            pendentes.push(() => resolve({ status: token === "token-velho" ? 401 : 204 }));
+          }),
+      );
+
+      const primeiro = enviar(ATIVA());
+      const segundo = enviar(ATIVA());
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(pendentes.length, 2);
+      pendentes.splice(0).forEach((responder) => responder());
+      // O sinal que renovou manda de novo com o access novo.
+      await new Promise((resolve) => setImmediate(resolve));
+      pendentes.splice(0).forEach((responder) => responder());
+
+      assert.deepEqual((await Promise.all([primeiro, segundo])).sort(), [false, true]);
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.equal(post.mock.callCount(), 3);
     });
 
     it("sem `renovar`, o 401 só cala o token", async () => {
@@ -583,7 +618,7 @@ describe("o sinal com o axios de verdade", () => {
   }
 
   for (const status of [401, 403, 500]) {
-    it(`o ${status} do sinal passa longe do caminho de erro (sem renovar nem sair)`, async () => {
+    it(`o ${status} do sinal passa longe do caminho de erro do interceptor (sem sair)`, async () => {
       const { instancia, caminhos } = axiosQueResponde(status);
       const enviar = criarEnvioDePresenca({
         post: (...args) => instancia.post(...args),

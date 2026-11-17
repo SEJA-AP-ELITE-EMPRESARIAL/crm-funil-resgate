@@ -380,3 +380,43 @@ test("o access vencido: quem está parado não renova; quem mexe renova em silê
   await expect(page.getByRole("alert")).toHaveCount(0);
   await printDoPainel(context, "11-painel-falso-access-renovado.png");
 });
+
+test("a renovação recusada não tira ninguém do sistema nem é tentada de novo", async ({
+  page,
+  request,
+}) => {
+  await entrar(page, "edu@e2e.sejaap.com.br");
+  await esperarSinal(request, { tela: PRIMEIRO_FUNIL });
+  const refresh = await page.evaluate(() => localStorage.getItem("crm_refresh_token"));
+  expect(refresh).not.toBeNull();
+  const renovacoes = vigiarRenovacoes(page);
+  const saidos = vigiarSinais(page);
+
+  // O access vencido, e o refresh recusado (sessão revogada no login central).
+  await page.evaluate(() => localStorage.setItem("crm_access_token", "access-vencido"));
+  await page.route("**/api/token/refresh/", (rota) =>
+    rota.fulfill({ status: 401, contentType: "application/json", body: '{"detail":"x"}' }),
+  );
+  await limparSinais(request);
+
+  // Ela clica: o sinal leva 401, tenta renovar uma vez, e a renovação falha.
+  await page.getByRole("tab", { name: "Dashboard" }).click();
+  await expect.poll(() => renovacoes.length, { timeout: 5000 }).toBe(1);
+  await page.waitForTimeout(1500);
+  expect(saidos).toHaveLength(1);
+
+  // Continua no CRM, com a sessão como estava, sem aviso.
+  await expect(page).toHaveURL(RAIZ);
+  expect(await tokenDaPagina(page)).toBe("access-vencido");
+  expect(await page.evaluate(() => localStorage.getItem("crm_refresh_token"))).toBe(refresh);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Dashboard" })).toHaveAttribute("aria-selected", "true");
+
+  // Outro clique: nem renovação nova, nem o token recusado de novo.
+  await page.getByRole("tab", { name: "Kanban" }).click();
+  await page.waitForTimeout(1500);
+  expect(renovacoes).toHaveLength(1);
+  expect(saidos).toHaveLength(1);
+  expect(await sinais(request)).toEqual([]);
+  await expect(page.getByText("Escola Aprender+")).toBeVisible();
+});
