@@ -95,8 +95,13 @@ ao backend (`POST /api/crm/presenca/`, ver [03](03-api.md)):
 Só manda logado e em tela interna: a tela de login, as de senha públicas e a rota
 desconhecida ficam caladas, e o `/admin/` do Django nem carrega o front. O erro do
 sinal nunca aparece: sem aviso, sem nova tentativa, e o pedido passa longe do
-interceptor de 401 (`validateStatus`), então não renova nem encerra a sessão; o
-access recusado (401) não é mandado de novo até o token mudar. O GlitchTip
+interceptor de 401 (`validateStatus`), então nunca encerra a sessão; o access
+recusado (401) não é mandado de novo até o token mudar. A exceção é o access
+vencido (4 h) de quem está mexendo na tela (clique ou tecla nos últimos 3 min):
+quem só lê o CRM não chama a API, e sumiria do painel. Para ela, o sinal renova
+o access em silêncio (`renovarAcessoEmSilencio` do `api.js`, que não sai do
+sistema na falha) e manda de novo; uma vez só entre dois sinais aceitos. A aba
+esquecida aberta não renova nada. O GlitchTip
 descarta o rastro do sinal. Testes no `npm test` (`lib/presenca.test.js`,
 `lib/telaAtual.test.js`) e e2e em `e2e/rodar-presenca.sh` (ver o README).
 

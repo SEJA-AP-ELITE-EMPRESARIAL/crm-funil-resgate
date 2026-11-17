@@ -230,7 +230,8 @@ CRM (`IDENTIDADE_APP_KEY`, a mesma do login). Nada fica gravado no CRM.
   chave de API e a sessão do `/admin/` levam **401**, e nada vai ao Conecta.
 - **204** sempre que o corpo vale, mesmo com o Conecta fora ou em manutenção;
   **400** para o corpo que não é sinal; `GET` leva 405.
-- **20 por minuto por pessoa** (`CRM_PRESENCA_RATE`), 429 depois.
+- **20 por minuto por pessoa** (`CRM_PRESENCA_RATE`), 429 depois. O contador é
+  o LocMem de cada worker do gunicorn: com 3 workers, o teto real chega ao triplo.
 
 O texto de cada tela (rota → módulo · tela) está em
 `frontend/src/lib/telaAtual.js`.

@@ -20,7 +20,7 @@ do compose em produção). Modelos: `backend/.env.example` e `deploy/.env.prod.e
 | `CRM_COMISSAO_RATE` | `0.03` | Taxa de comissão (fração) |
 | `CRM_MESES_CONTRATO_PADRAO` | `12` | Meses padrão quando o cliente não define |
 | `CRM_API_RATE` | `120/min` | Cota por chave de API (formato do DRF, ex.: `120/min`, `5000/day`). Não afeta o front — ver [10](10-integracao-externa.md) |
-| `CRM_PRESENCA_RATE` | `20/min` | Opcional. Teto do sinal de presença da tela por pessoa (`POST /api/crm/presenca/`, TSK-1521). A tela manda 1 por minuto por aba, mais 1 por troca de tela |
+| `CRM_PRESENCA_RATE` | `20/min` | Opcional. Teto do sinal de presença da tela por pessoa (`POST /api/crm/presenca/`, TSK-1521). A tela manda 1 por minuto por aba, mais 1 por troca de tela e 1 na volta à aba (no máximo a cada 30 s). O contador é por worker do gunicorn (LocMem): com 3 workers, o teto real chega ao triplo. Vazio cai no padrão |
 | `SENTRY_DSN` | vazio | DSN do projeto `crm` no GlitchTip. Vazio = nada é enviado; na suíte nunca liga. DSN malformado só avisa no stderr e o backend sobe sem SDK (TSK-1147) |
 | `SENTRY_ENVIRONMENT` | `production` | `environment` dos eventos |
 | `GIT_COMMIT` | vazio | `release` dos eventos. Não vai no `.env`: o `docker-compose.yml` o passa como build arg e ele fica gravado na imagem (`GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build`) |
