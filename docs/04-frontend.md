@@ -101,8 +101,9 @@ vencido (4 h) de quem está mexendo na tela (alguma das interações acima, ou
 abrir a página, nos últimos 3 min):
 quem só lê o CRM não chama a API, e sumiria do painel. Para ela, o sinal renova
 o access em silêncio (`renovarAcessoEmSilencio` do `api.js`, que não sai do
-sistema na falha) e manda de novo; uma vez só entre dois sinais aceitos. A aba
-esquecida aberta não renova nada. O GlitchTip
+sistema na falha) e manda de novo; uma vez só entre dois sinais aceitos, e
+dividida quando dois sinais saem juntos (só o mais novo vai depois dela). O
+refresh tem o prazo das outras chamadas. A aba esquecida aberta não renova nada. O GlitchTip
 descarta o rastro do sinal. Testes no `npm test` (`lib/presenca.test.js`,
 `lib/telaAtual.test.js`) e e2e em `e2e/rodar-presenca.sh` (ver o README).
 

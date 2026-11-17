@@ -536,30 +536,78 @@ describe("criarEnvioDePresenca", () => {
       assert.equal(renovar.mock.callCount(), 2);
     });
 
-    it("dois sinais recusados ao mesmo tempo renovam uma vez só", async () => {
-      // A troca de tela com o sinal do minuto ainda no caminho.
-      const { estado, post, renovar, enviar } = montarComRenovacao();
+    /** O `post` que só responde quando o teste manda, com o status do token que levou. */
+    function segurarPedidos(estado, post, usados) {
       const pendentes = [];
       post.mock.mockImplementation(
         () =>
           new Promise((resolve) => {
             const token = estado.token;
+            usados.push(token);
             pendentes.push(() => resolve({ status: token === "token-velho" ? 401 : 204 }));
           }),
       );
+      const andar = () => new Promise((resolve) => setImmediate(resolve));
+      return {
+        pendentes,
+        async responderTodos() {
+          await andar();
+          pendentes.splice(0).forEach((responder) => responder());
+          await andar();
+        },
+      };
+    }
 
-      const primeiro = enviar(ATIVA());
-      const segundo = enviar(ATIVA());
-      await new Promise((resolve) => setImmediate(resolve));
-      assert.equal(pendentes.length, 2);
-      pendentes.splice(0).forEach((responder) => responder());
-      // O sinal que renovou manda de novo com o access novo.
-      await new Promise((resolve) => setImmediate(resolve));
-      pendentes.splice(0).forEach((responder) => responder());
+    it("dois sinais recusados ao mesmo tempo: uma renovação, e só a tela mais nova vai", async () => {
+      // A troca de tela com o sinal do minuto ainda no caminho.
+      const { estado, post, renovar, usados, enviar } = montarComRenovacao();
+      const { pendentes, responderTodos } = segurarPedidos(estado, post, usados);
+      const agora = Date.now();
 
-      assert.deepEqual((await Promise.all([primeiro, segundo])).sort(), [false, true]);
+      const doMinuto = enviar({ ...FUNIL, ultimaInteracao: agora - 20 * 1000 });
+      const daTroca = enviar({ ...CLIENTE, ultimaInteracao: agora });
+      await responderTodos();
       assert.equal(renovar.mock.callCount(), 1);
+      // Depois da renovação, só um pedido de novo: o da tela nova.
+      assert.equal(pendentes.length, 1);
+      await responderTodos();
+
+      assert.equal(await doMinuto, false);
+      assert.equal(await daTroca, true);
       assert.equal(post.mock.callCount(), 3);
+      assert.deepEqual(usados, ["token-velho", "token-velho", "token-novo-1"]);
+      assert.equal(post.mock.calls[2].arguments[1].tela, CLIENTE.tela);
+    });
+
+    it("o sinal que chega com a renovação em andamento espera por ela e vai com o access novo", async () => {
+      const { estado, post, renovar, usados, enviar } = montarComRenovacao();
+      let soltarRenovacao;
+      renovar.mock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            soltarRenovacao = () => {
+              estado.token = "token-novo-1";
+              resolve();
+            };
+          }),
+      );
+      const { responderTodos } = segurarPedidos(estado, post, usados);
+
+      const doMinuto = enviar(ATIVA());
+      await responderTodos();
+      assert.equal(renovar.mock.callCount(), 1);
+      // A renovação ainda no caminho, e a pessoa troca de tela.
+      const daTroca = enviar({ ...CLIENTE, ultimaInteracao: Date.now() });
+      soltarRenovacao();
+      await responderTodos();
+      await responderTodos();
+
+      assert.equal(await doMinuto, false);
+      assert.equal(await daTroca, true);
+      assert.equal(renovar.mock.callCount(), 1);
+      // O token já recusado não foi mandado de novo: o da troca saiu só com o novo.
+      assert.deepEqual(usados, ["token-velho", "token-novo-1"]);
+      assert.equal(post.mock.calls[1].arguments[1].tela, CLIENTE.tela);
     });
 
     it("sem `renovar`, o 401 só cala o token", async () => {
@@ -572,7 +620,7 @@ describe("criarEnvioDePresenca", () => {
     });
   });
 
-  it("o 401 do token velho que chega depois da renovação não cala o novo", async () => {
+  it("o 401 do token velho que chega depois de a tela renovar manda de novo com o novo", async () => {
     const { estado, post, enviar } = montar();
     let responder;
     post.mock.mockImplementationOnce(
@@ -585,10 +633,12 @@ describe("criarEnvioDePresenca", () => {
     const pendente = enviar(SINAL);
     estado.token = "token-novo";
     responder({ status: 401 });
-    assert.equal(await pendente, false);
-
-    assert.equal(await enviar(SINAL), true);
+    assert.equal(await pendente, true);
     assert.equal(post.mock.callCount(), 2);
+
+    // E o novo não ficou calado.
+    assert.equal(await enviar(SINAL), true);
+    assert.equal(post.mock.callCount(), 3);
   });
 });
 
