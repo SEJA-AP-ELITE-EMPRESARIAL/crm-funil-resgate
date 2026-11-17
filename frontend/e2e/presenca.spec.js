@@ -10,8 +10,9 @@
  * - um sinal por minuto com a aba aberta;
  * - na tela de login, sem login, nenhum pedido de sinal sai do navegador;
  * - o /admin do Django não manda sinal, e a sessão dele é recusada na rota;
- * - o erro do sinal (401, 500, rede) não aparece, não renova a sessão e não
- *   tira ninguém do sistema.
+ * - o erro do sinal (401, 500, rede) não aparece e não tira ninguém do
+ *   sistema; o 401 renova a sessão uma vez só, e só de quem está mexendo na
+ *   tela (o access vencido de quem só lê o CRM).
  *
  * Os prints vão para docs/telas/tsk-1521/.
  */
@@ -75,14 +76,17 @@ async function printDoPainel(context, arquivo) {
   await painel.close();
 }
 
-/** Todo pedido de sinal que sair desta página. */
-function vigiarSinais(page) {
+/** Todo pedido a `caminho` (o do sinal, por padrão) que sair desta página. */
+function vigiarSinais(page, caminho = ROTA) {
   const saidos = [];
   page.on("request", (pedido) => {
-    if (new URL(pedido.url()).pathname === ROTA) saidos.push(pedido);
+    if (new URL(pedido.url()).pathname === caminho) saidos.push(pedido);
   });
   return saidos;
 }
+
+const vigiarRenovacoes = (page) => vigiarSinais(page, "/api/token/refresh/");
+const tokenDaPagina = (page) => page.evaluate(() => localStorage.getItem("crm_access_token"));
 
 // O Conecta falso guarda os sinais entre um teste e outro: sem limpar, o
 // `esperarSinal` acharia o sinal do teste anterior.
@@ -145,9 +149,11 @@ test("passo 3: logado, o sinal chega com a tela certa ao abrir e a cada troca de
   expect(JSON.stringify(await sinais(request))).not.toContain("Escola");
   await page.screenshot({ path: PRINTS + "03-cartao-do-cliente.png" });
   await printDoPainel(context, "04-painel-falso-cartao-do-cliente.png");
+  // Limpa antes do Escape: o sinal da volta sai 500 ms depois dele, e limpar
+  // depois de o diálogo sumir poderia apagá-lo.
+  await limparSinais(request);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await limparSinais(request);
   await esperarSinal(request, { modulo: "Kanban", tela: PRIMEIRO_FUNIL }, { prazo: 5000 });
 
   // A troca de senha é outra rota.
@@ -239,7 +245,7 @@ test("sem login, a tela de login e as públicas não mandam sinal nenhum", async
 
   expect(saidos.map((p) => p.url())).toEqual([]);
   expect(await sinais(request)).toEqual([]);
-  expect(await page.evaluate(() => localStorage.getItem("crm_access_token"))).toBeNull();
+  expect(await tokenDaPagina(page)).toBeNull();
   await printDoPainel(context, "08-painel-falso-login-sem-sinal.png");
 });
 
@@ -248,6 +254,10 @@ test("o /admin do Django não manda sinal, e a sessão dele é recusada na rota"
   context,
   request,
 }) => {
+  // O /admin/ é servido pelo Django, em outra origem: o código da tela nem
+  // carrega ali (em produção, o nginx manda /admin/ ao backend), então a
+  // contagem abaixo só confirma isso. O que este teste prova de fato é a
+  // segunda parte: com a sessão do /admin/, a rota do sinal diz 401.
   const saidos = vigiarSinais(page);
 
   await page.goto(`${BACKEND}/admin/login/`);
@@ -273,21 +283,18 @@ test("o /admin do Django não manda sinal, e a sessão dele é recusada na rota"
   await printDoPainel(context, "10-painel-falso-admin-sem-sinal.png");
 });
 
-test("o erro do sinal não aparece, não renova a sessão e não tira ninguém do sistema", async ({
+test("o erro do sinal não aparece nem tira ninguém do sistema; o 401 renova uma vez só", async ({
   page,
   request,
 }) => {
   await entrar(page, "carla@e2e.sejaap.com.br");
   await esperarSinal(request, { tela: PRIMEIRO_FUNIL });
-  const renovacoes = [];
-  page.on("request", (pedido) => {
-    if (new URL(pedido.url()).pathname === "/api/token/refresh/") renovacoes.push(pedido);
-  });
+  const renovacoes = vigiarRenovacoes(page);
   const saidos = vigiarSinais(page);
 
-  // A rede caindo, o backend com erro e, por último, o 401 (que cala o token).
-  const abas = ["Dashboard", "Kanban", "Dashboard"];
-  const falhas = ["rede", 500, 401];
+  // A rede caindo e o backend com erro: nada é repetido nem renovado.
+  const abas = ["Dashboard", "Kanban"];
+  const falhas = ["rede", 500];
   for (const [i, falha] of falhas.entries()) {
     await page.route(`**${ROTA}`, (rota) =>
       falha === "rede"
@@ -300,17 +307,76 @@ test("o erro do sinal não aparece, não renova a sessão e não tira ninguém d
     await page.waitForTimeout(500);
     await page.unroute(`**${ROTA}`);
   }
-  expect(saidos).toHaveLength(3);
+  expect(saidos).toHaveLength(2);
+  expect(renovacoes).toHaveLength(0);
 
-  // O token que levou 401 não é mandado de novo: nem na troca de tela.
+  // O 401 com a pessoa mexendo (acabou de clicar): uma renovação em silêncio
+  // e o mesmo sinal de novo, que também leva 401. Aí o sinal se cala.
+  await page.route(`**${ROTA}`, (rota) =>
+    rota.fulfill({ status: 401, contentType: "application/json", body: '{"detail":"x"}' }),
+  );
+  await page.getByRole("tab", { name: "Dashboard" }).click();
+  await expect.poll(() => saidos.length, { timeout: 5000 }).toBe(4);
+  expect(renovacoes).toHaveLength(1);
+  await page.waitForTimeout(500);
+  await page.unroute(`**${ROTA}`);
+
+  // O token que levou 401 não é mandado de novo, nem na troca de tela, e não
+  // há segunda renovação.
   await page.getByRole("tab", { name: "Kanban" }).click();
   await page.waitForTimeout(1500);
-  expect(saidos).toHaveLength(3);
+  expect(saidos).toHaveLength(4);
+  expect(renovacoes).toHaveLength(1);
 
-  // Nada para a pessoa: sem renovação, sem saída, sem aviso.
-  expect(renovacoes).toHaveLength(0);
+  // Nada para a pessoa: sem saída, sem aviso.
   await expect(page).toHaveURL(RAIZ);
-  expect(await page.evaluate(() => localStorage.getItem("crm_access_token"))).not.toBeNull();
+  expect(await tokenDaPagina(page)).not.toBeNull();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByText("Escola Aprender+")).toBeVisible();
+});
+
+test("o access vencido: quem está parado não renova; quem mexe renova em silêncio e o sinal volta", async ({
+  page,
+  context,
+  request,
+}) => {
+  // O relógio da página na mão: os 4 minutos passam sem o teste esperar.
+  await page.clock.install();
+  await entrar(page, "dani@e2e.sejaap.com.br");
+  await esperarSinal(request, { tela: PRIMEIRO_FUNIL });
+  // Mais de 3 min sem clique nem tecla: a pessoa está parada.
+  await page.clock.runFor(3.5 * 60 * 1000);
+  // Os sinais desses minutos (aceitos) terminam antes de a contagem começar.
+  await page.waitForTimeout(1000);
+  const renovacoes = vigiarRenovacoes(page);
+  const saidos = vigiarSinais(page);
+  const recusas = [];
+  page.on("response", (resposta) => {
+    if (new URL(resposta.url()).pathname === ROTA && resposta.status() === 401) recusas.push(resposta);
+  });
+
+  // O access do CRM vence em 4 h: no lugar dele, um que o backend de verdade recusa.
+  await page.evaluate(() => localStorage.setItem("crm_access_token", "access-vencido"));
+  await limparSinais(request);
+  await page.clock.runFor(65 * 1000);
+  await expect.poll(() => recusas.length, { timeout: 5000 }).toBe(1);
+  await page.waitForTimeout(1000);
+  expect(saidos).toHaveLength(1);
+  expect(renovacoes).toHaveLength(0);
+  expect(await sinais(request)).toEqual([]);
+
+  // Ela clica: o sinal da troca de tela renova o access e chega ao Conecta.
+  await page.getByRole("tab", { name: "Dashboard" }).click();
+  await page.clock.runFor(1000);
+  await esperarSinal(request, { modulo: "Dashboard", tela: PRIMEIRO_FUNIL }, { prazo: 5000 });
+  expect(renovacoes).toHaveLength(1);
+  // O token já recusado não foi mandado antes da renovação: só o sinal novo.
+  expect(saidos).toHaveLength(2);
+  expect(recusas).toHaveLength(1);
+  const novo = await tokenDaPagina(page);
+  expect(novo).not.toBe("access-vencido");
+  expect(novo).not.toBeNull();
+  await expect(page).toHaveURL(RAIZ);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await printDoPainel(context, "11-painel-falso-access-renovado.png");
 });
