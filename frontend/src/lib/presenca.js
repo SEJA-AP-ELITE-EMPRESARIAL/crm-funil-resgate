@@ -35,6 +35,12 @@ export const ESPERA_NA_TROCA_DE_TELA_MS = 500;
 export const VOLTA_SEM_SINAL_MS = 30 * 1000;
 /** O backend responde na hora (o repasse tem teto de 2 s); mais que isto é rede ruim. */
 export const TEMPO_MAXIMO_DO_PEDIDO_MS = 15 * 1000;
+/**
+ * Quem mexeu na tela há menos disto está usando o CRM agora (o "parado" do
+ * Conecta é mais de 3 min): só essa pessoa renova o access que o backend
+ * recusou ao sinal. Ver `criarEnvioDePresenca`.
+ */
+export const ATIVA_HA_MENOS_DE_MS = 3 * 60 * 1000;
 
 /**
  * O que conta como interação: clique, tecla e o gesto de rolar (roda do mouse,
@@ -53,38 +59,68 @@ const OPCOES = { capture: true, passive: true };
  *
  * - Sem token (ninguém logado), não manda nada.
  * - Toda resposta HTTP volta pelo caminho de sucesso (`validateStatus`): o
- *   interceptor de 401 do `api.js` nem a vê, então o sinal nunca renova a
- *   sessão nem tira ninguém do sistema. A falha de rede também não renova (o
- *   interceptor só age com status 401). Quem cuida da sessão são as chamadas da
- *   própria tela.
- * - O access que o backend recusou (401) não é mandado de novo: numa aba
- *   esquecida aberta de noite seria um 401 por minuto até de manhã. O sinal
- *   volta quando o token muda (uma ação da pessoa renovou a sessão, ou um
- *   login novo).
- * - Nada é repetido aqui: o próximo sinal sai no minuto seguinte.
+ *   interceptor de 401 do `api.js` nem a vê, então o sinal nunca tira ninguém do
+ *   sistema. A falha de rede também não (o interceptor só age com status 401).
+ * - O access recusado (401) não é mandado de novo: numa aba esquecida aberta de
+ *   noite seria um 401 por minuto até de manhã. O sinal volta quando o token
+ *   muda (uma ação da pessoa renovou a sessão, ou um login novo).
+ * - A exceção é quem está mexendo na tela (`ATIVA_HA_MENOS_DE_MS`): o access do
+ *   CRM vence em 4 h, e quem só lê (abrir cartão, trocar de aba e de funil não
+ *   chamam a API) sumiria do painel com a aba aberta e em uso. Para ela, o
+ *   sinal chama `renovar` (o refresh do `api.js`, sem sair do sistema na
+ *   falha) e manda de novo com o access novo. Uma renovação só entre dois
+ *   sinais aceitos: se ela falhar, ou o access novo também for recusado, o
+ *   sinal fica calado até o token mudar por fora. A aba esquecida não renova.
+ * - Nada mais é repetido aqui: o próximo sinal sai no minuto seguinte.
  *
  * @param {object} p
  * @param {(url: string, corpo: object, opcoes: object) => Promise<{status: number}>} p.post  o `api.post`
  * @param {() => string | null} p.tokenAtual  o `getAccessToken` do `api.js`
+ * @param {(() => Promise<unknown>) | null} [p.renovar]  o `renovarAcessoEmSilencio` do `api.js`
  */
-export function criarEnvioDePresenca({ post, tokenAtual }) {
+export function criarEnvioDePresenca({ post, tokenAtual, renovar = null }) {
   let tokenRecusado = null;
+  let podeRenovar = true;
+
+  async function postar(corpo) {
+    const token = tokenAtual();
+    const resposta = await post(ROTA_DA_PRESENCA, corpo, {
+      timeout: TEMPO_MAXIMO_DO_PEDIDO_MS,
+      validateStatus: () => true,
+    });
+    if (resposta?.status === 401) tokenRecusado = token;
+    if (resposta?.status === 204) podeRenovar = true;
+    return resposta?.status;
+  }
+
+  /** `true` se renovou e há um access novo para mandar. */
+  async function renovarSePuder(ultimaInteracao) {
+    if (!renovar || !podeRenovar || tokenAtual() !== tokenRecusado) return false;
+    if (!Number.isFinite(ultimaInteracao) || Date.now() - ultimaInteracao >= ATIVA_HA_MENOS_DE_MS) {
+      return false;
+    }
+    podeRenovar = false;
+    try {
+      await renovar();
+    } catch {
+      return false;
+    }
+    const novo = tokenAtual();
+    return Boolean(novo) && novo !== tokenRecusado;
+  }
 
   return async function enviarPresenca({ modulo, tela, ultimaInteracao = null }) {
     try {
-      const token = tokenAtual();
-      if (!token || token === tokenRecusado) return false;
+      if (!tokenAtual()) return false;
       if (typeof tela !== "string" || !tela) return false;
       const corpo = { modulo: typeof modulo === "string" ? modulo : "", tela };
       // Fora do intervalo do `Date` o `toISOString` lançaria: aí o sinal vai sem ela.
       const quando = Number.isFinite(ultimaInteracao) ? new Date(ultimaInteracao) : null;
       if (quando && !Number.isNaN(quando.getTime())) corpo.ultima_interacao = quando.toISOString();
-      const resposta = await post(ROTA_DA_PRESENCA, corpo, {
-        timeout: TEMPO_MAXIMO_DO_PEDIDO_MS,
-        validateStatus: () => true,
-      });
-      if (resposta?.status === 401) tokenRecusado = token;
-      return resposta?.status === 204;
+      if (tokenAtual() === tokenRecusado && !(await renovarSePuder(ultimaInteracao))) return false;
+      let status = await postar(corpo);
+      if (status === 401 && (await renovarSePuder(ultimaInteracao))) status = await postar(corpo);
+      return status === 204;
     } catch {
       return false;
     }

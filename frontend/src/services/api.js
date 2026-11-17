@@ -61,6 +61,22 @@ async function refreshAccessToken() {
   return data.access;
 }
 
+/**
+ * Renova o access sem efeito nenhum na falha: não limpa a sessão nem leva ao
+ * login (isso fica para o interceptor abaixo, numa ação da pessoa). É o que o
+ * sinal de presença usa (TSK-1521, `lib/presenca.js`). Divide com o
+ * interceptor a renovação que já estiver em andamento.
+ */
+export async function renovarAcessoEmSilencio() {
+  const emAndamento = refreshing || refreshAccessToken();
+  refreshing = emAndamento;
+  try {
+    return await emAndamento;
+  } finally {
+    if (refreshing === emAndamento) refreshing = null;
+  }
+}
+
 api.interceptors.response.use(
   (resp) => resp,
   async (error) => {

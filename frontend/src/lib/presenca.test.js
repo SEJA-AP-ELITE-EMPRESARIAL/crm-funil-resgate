@@ -10,7 +10,8 @@
  * só quando a troca vem com redirecionamento); na volta à aba, um na hora; e a
  * última interação de verdade, porque "parado" é mais de 3 minutos sem clique
  * nem tecla. Sem login, nada. Erro do sinal não aparece nem trava o próximo, e
- * um 401 dele não renova a sessão nem tira ninguém do sistema.
+ * um 401 dele não tira ninguém do sistema: só renova o access de quem está
+ * mexendo na tela, uma vez, e em silêncio.
  */
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, mock } from "node:test";
@@ -21,7 +22,9 @@ import axios from "axios";
 import settle from "axios/unsafe/core/settle.js";
 
 import {
+  ATIVA_HA_MENOS_DE_MS,
   ESPERA_NA_TROCA_DE_TELA_MS,
+  INTERACOES,
   INTERVALO_DO_SINAL_MS,
   ROTA_DA_PRESENCA,
   TEMPO_MAXIMO_DO_PEDIDO_MS,
@@ -297,6 +300,35 @@ describe("criarSinalDePresenca", () => {
 
     assert.equal(sinais().length, 0);
   });
+
+  it("destruir tira cada ouvinte que pôs, no documento e na janela", () => {
+    // O `tela = null` do destruir já calaria o sinal: aqui se conta o que ficou pendurado.
+    const contar = (alvo) => {
+      const vivos = new Map();
+      const pos = alvo.addEventListener.bind(alvo);
+      const tirou = alvo.removeEventListener.bind(alvo);
+      alvo.addEventListener = (tipo, fn, opcoes) => {
+        vivos.set(tipo, (vivos.get(tipo) || 0) + 1);
+        pos(tipo, fn, opcoes);
+      };
+      alvo.removeEventListener = (tipo, fn, opcoes) => {
+        vivos.set(tipo, (vivos.get(tipo) || 0) - 1);
+        tirou(tipo, fn, opcoes);
+      };
+      return vivos;
+    };
+    const outroDocumento = documentoFalso();
+    const outraJanela = new EventTarget();
+    const noDocumento = contar(outroDocumento);
+    const naJanela = contar(outraJanela);
+
+    const outro = criarSinalDePresenca({ enviar, documento: outroDocumento, janela: outraJanela });
+    assert.deepEqual([...noDocumento.keys()].sort(), [...INTERACOES, "visibilitychange"].sort());
+    assert.deepEqual([...naJanela.keys()], ["popstate"]);
+    outro.destruir();
+
+    assert.ok([...noDocumento.values(), ...naJanela.values()].every((n) => n === 0));
+  });
 });
 
 // === O pedido ==============================================================
@@ -393,6 +425,116 @@ describe("criarEnvioDePresenca", () => {
     post.mock.mockImplementation(async () => ({ status: 204 }));
     assert.equal(await enviar(SINAL), true);
     assert.equal(post.mock.callCount(), 2);
+  });
+
+  describe("o access vencido de quem está mexendo na tela", () => {
+    // Quem mexeu agora há pouco, e quem está parado há mais de 3 min.
+    const ATIVA = () => ({ ...FUNIL, ultimaInteracao: Date.now() - 10 * 1000 });
+    const PARADA = () => ({ ...FUNIL, ultimaInteracao: Date.now() - ATIVA_HA_MENOS_DE_MS - 1000 });
+
+    /** O backend recusa o "token-velho" e aceita os outros; `renovar` troca o token. */
+    function montarComRenovacao({ renova = true } = {}) {
+      const estado = { token: "token-velho", renovacoes: 0 };
+      const usados = [];
+      const post = mock.fn(async () => {
+        usados.push(estado.token);
+        return { status: estado.token === "token-velho" ? 401 : 204 };
+      });
+      const renovar = mock.fn(async () => {
+        estado.renovacoes += 1;
+        if (renova === "erro") throw new Error("refresh recusado");
+        if (renova) estado.token = `token-novo-${estado.renovacoes}`;
+      });
+      const enviar = criarEnvioDePresenca({ post, tokenAtual: () => estado.token, renovar });
+      return { estado, post, renovar, usados, enviar };
+    }
+
+    it("no 401, renova uma vez e manda de novo com o access novo", async () => {
+      const { post, renovar, usados, enviar } = montarComRenovacao();
+
+      assert.equal(await enviar(ATIVA()), true);
+
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.deepEqual(usados, ["token-velho", "token-novo-1"]);
+      // O mesmo corpo nas duas vezes.
+      assert.deepEqual(post.mock.calls[0].arguments[1], post.mock.calls[1].arguments[1]);
+    });
+
+    it("parada, não renova: o sinal se cala; volta quando ela mexe", async () => {
+      const { post, renovar, enviar } = montarComRenovacao();
+
+      assert.equal(await enviar(PARADA()), false);
+      assert.equal(await enviar(PARADA()), false);
+      assert.equal(renovar.mock.callCount(), 0);
+      assert.equal(post.mock.callCount(), 1);
+
+      // Mexeu: o sinal seguinte renova sem mandar antes o token já recusado.
+      assert.equal(await enviar(ATIVA()), true);
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.equal(post.mock.callCount(), 2);
+    });
+
+    it("sem a última interação, também não renova", async () => {
+      const { renovar, enviar } = montarComRenovacao();
+      assert.equal(await enviar({ ...FUNIL, ultimaInteracao: null }), false);
+      assert.equal(renovar.mock.callCount(), 0);
+    });
+
+    it("a renovação que falha não sai do sistema nem é tentada de novo", async () => {
+      const { estado, post, renovar, enviar } = montarComRenovacao({ renova: "erro" });
+
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.equal(post.mock.callCount(), 1);
+      assert.equal(estado.token, "token-velho");
+
+      // Uma ação da pessoa renovou a sessão por fora: o sinal volta.
+      estado.token = "token-da-tela";
+      assert.equal(await enviar(ATIVA()), true);
+    });
+
+    it("a renovação que não troca o token não manda de novo", async () => {
+      const { post, renovar, enviar } = montarComRenovacao({ renova: false });
+
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.equal(post.mock.callCount(), 1);
+    });
+
+    it("o access novo também recusado: sem segunda renovação, e o sinal se cala", async () => {
+      const { estado, post, renovar, enviar } = montarComRenovacao();
+      post.mock.mockImplementation(async () => ({ status: 401 }));
+
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(renovar.mock.callCount(), 1);
+      assert.equal(post.mock.callCount(), 2);
+      assert.equal(estado.token, "token-novo-1");
+    });
+
+    it("depois de um sinal aceito, o próximo vencimento renova de novo", async () => {
+      const { estado, renovar, enviar } = montarComRenovacao();
+
+      assert.equal(await enviar(ATIVA()), true);
+      assert.equal(await enviar(ATIVA()), true);
+      // Mais 4 h: o access novo venceu também.
+      estado.token = "token-velho";
+      assert.equal(await enviar(ATIVA()), true);
+      assert.equal(renovar.mock.callCount(), 2);
+    });
+
+    it("sem `renovar`, o 401 só cala o token", async () => {
+      const post = mock.fn(async () => ({ status: 401 }));
+      const enviar = criarEnvioDePresenca({ post, tokenAtual: () => "token-velho" });
+
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(await enviar(ATIVA()), false);
+      assert.equal(post.mock.callCount(), 1);
+    });
   });
 
   it("o 401 do token velho que chega depois da renovação não cala o novo", async () => {

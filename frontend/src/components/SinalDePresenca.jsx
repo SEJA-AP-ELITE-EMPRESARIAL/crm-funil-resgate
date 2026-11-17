@@ -7,8 +7,9 @@
  * a rota desconhecida ficam caladas. O `/admin/` do Django nem carrega este
  * código (o nginx o manda ao backend), e a rota do sinal recusa a sessão dele.
  *
- * O erro do sinal nunca aparece para a pessoa: sem aviso, sem nova tentativa,
- * sem renovar a sessão nem sair dela (ver `lib/presenca.js`). Não desenha nada.
+ * O erro do sinal nunca aparece para a pessoa: sem aviso e sem sair da sessão.
+ * A sessão só é renovada para quem está mexendo na tela, quando o access
+ * venceu (ver `lib/presenca.js`). Não desenha nada.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";
@@ -16,11 +17,12 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { criarEnvioDePresenca, criarSinalDePresenca } from "@/lib/presenca";
 import { assinarTelaDeclarada, lerTelaDeclarada, telaDaRota } from "@/lib/telaAtual";
-import api, { getAccessToken } from "@/services/api";
+import api, { getAccessToken, renovarAcessoEmSilencio } from "@/services/api";
 
 const enviarPresenca = criarEnvioDePresenca({
   post: (...args) => api.post(...args),
   tokenAtual: getAccessToken,
+  renovar: renovarAcessoEmSilencio,
 });
 
 export function SinalDePresenca() {
