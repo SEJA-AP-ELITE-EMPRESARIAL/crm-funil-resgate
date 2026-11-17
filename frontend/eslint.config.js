@@ -78,10 +78,11 @@ export default [
     },
   },
 
-  // Os scripts do build de produção e os testes (`npm test`, no `node --test`)
-  // rodam no Node. O padrão de cima não pega .mjs; este bloco põe os dois na régua.
+  // Os scripts do build de produção, os testes (`npm test`, no `node --test`) e o
+  // e2e do Playwright (TSK-1521) rodam no Node. O padrão de cima não pega .mjs;
+  // este bloco põe todos na régua.
   {
-    files: ['scripts/**/*.mjs', '**/*.test.{js,mjs}'],
+    files: ['scripts/**/*.mjs', '**/*.test.{js,mjs}', 'e2e/**/*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

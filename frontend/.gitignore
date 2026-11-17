@@ -14,3 +14,7 @@ dist-ssr
 .idea
 .DS_Store
 *.log
+
+# Saída do Playwright (e2e do sinal de presença, TSK-1521)
+test-results/
+playwright-report/
