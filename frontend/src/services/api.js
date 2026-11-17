@@ -50,10 +50,11 @@ api.interceptors.request.use((config) => {
 });
 
 // === Response: refresh automático em 401 ===
+// A renovação em andamento, da sessão (o refresh) que a pediu: quem pedir junto
+// na mesma sessão espera a mesma; outra sessão (saiu e entrou alguém) não.
 let refreshing = null;
 
-async function refreshAccessToken() {
-  const refresh = getRefreshToken();
+async function refreshAccessToken(refresh) {
   if (!refresh) throw new Error("sem refresh token");
   // Usa axios cru para não recursar no interceptor. Com o mesmo prazo das
   // outras chamadas: a renovação é dividida (o sinal de presença e as ações da
@@ -70,20 +71,27 @@ async function refreshAccessToken() {
   return data.access;
 }
 
+function renovarSessao() {
+  const refresh = getRefreshToken();
+  if (!refreshing || refreshing.refresh !== refresh) {
+    const esta = { refresh, promessa: refreshAccessToken(refresh) };
+    const largar = () => {
+      if (refreshing === esta) refreshing = null;
+    };
+    esta.promessa.then(largar, largar);
+    refreshing = esta;
+  }
+  return refreshing.promessa;
+}
+
 /**
  * Renova o access sem efeito nenhum na falha: não limpa a sessão nem leva ao
  * login (isso fica para o interceptor abaixo, numa ação da pessoa). É o que o
  * sinal de presença usa (TSK-1521, `lib/presenca.js`). Divide com o
- * interceptor a renovação que já estiver em andamento.
+ * interceptor a renovação da mesma sessão que já estiver em andamento.
  */
-export async function renovarAcessoEmSilencio() {
-  const emAndamento = refreshing || refreshAccessToken();
-  refreshing = emAndamento;
-  try {
-    return await emAndamento;
-  } finally {
-    if (refreshing === emAndamento) refreshing = null;
-  }
+export function renovarAcessoEmSilencio() {
+  return renovarSessao();
 }
 
 api.interceptors.response.use(
@@ -94,16 +102,18 @@ api.interceptors.response.use(
 
     if (status === 401 && original && !original._retry && !isAuthEndpoint(original.url)) {
       original._retry = true;
+      const refresh = getRefreshToken();
       try {
-        refreshing = refreshing || refreshAccessToken();
-        const newToken = await refreshing;
-        refreshing = null;
+        const newToken = await renovarSessao();
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
-        refreshing = null;
-        clearTokens();
-        window.dispatchEvent(new CustomEvent("crm-token-expired"));
+        // Só encerra a sessão que falhou: se a pessoa saiu, ou entrou outra,
+        // enquanto o refresh ia e voltava, a de agora fica como está.
+        if (getRefreshToken() === refresh) {
+          clearTokens();
+          window.dispatchEvent(new CustomEvent("crm-token-expired"));
+        }
       }
     }
     return Promise.reject(error);
