@@ -26,6 +26,7 @@ import {
   ESPERA_NA_TROCA_DE_TELA_MS,
   INTERACOES,
   INTERVALO_DO_SINAL_MS,
+  NOVA_RENOVACAO_DEPOIS_DE_MS,
   ROTA_DA_PRESENCA,
   TEMPO_MAXIMO_DO_PEDIDO_MS,
   VOLTA_SEM_SINAL_MS,
@@ -490,7 +491,7 @@ describe("criarEnvioDePresenca", () => {
 
     // Que a falha não tira ninguém do sistema é do `api.js` (sem `clearTokens`
     // nem evento): quem prova é o e2e "a renovação recusada...".
-    it("a renovação que falha não é tentada de novo, nem o token recusado é mandado", async () => {
+    it("a renovação que falha não é tentada de novo antes de 5 min, nem o token recusado é mandado", async () => {
       const { estado, post, renovar, enviar } = montarComRenovacao({ renova: "erro" });
 
       assert.equal(await enviar(ATIVA()), false);
@@ -513,7 +514,7 @@ describe("criarEnvioDePresenca", () => {
       assert.equal(post.mock.callCount(), 1);
     });
 
-    it("o access novo também recusado: sem segunda renovação, e o sinal se cala", async () => {
+    it("o access novo também recusado: sem segunda renovação antes de 5 min, e o sinal se cala", async () => {
       const { estado, post, renovar, enviar } = montarComRenovacao();
       post.mock.mockImplementation(async () => ({ status: 401 }));
 
@@ -558,25 +559,54 @@ describe("criarEnvioDePresenca", () => {
       };
     }
 
-    it("dois sinais recusados ao mesmo tempo: uma renovação, e só a tela mais nova vai", async () => {
-      // A troca de tela com o sinal do minuto ainda no caminho.
+    it("a troca de tela com o sinal do minuto recusado no caminho: uma renovação, e só a tela nova vai", async () => {
       const { estado, post, renovar, usados, enviar } = montarComRenovacao();
       const { pendentes, responderTodos } = segurarPedidos(estado, post, usados);
       const agora = Date.now();
 
       const doMinuto = enviar({ ...FUNIL, ultimaInteracao: agora - 20 * 1000 });
+      await new Promise((resolve) => setImmediate(resolve));
       const daTroca = enviar({ ...CLIENTE, ultimaInteracao: agora });
       await responderTodos();
       assert.equal(renovar.mock.callCount(), 1);
-      // Depois da renovação, só um pedido de novo: o da tela nova.
+      // Depois da renovação, um pedido só: o da tela nova, com o access novo.
       assert.equal(pendentes.length, 1);
       await responderTodos();
 
       assert.equal(await doMinuto, false);
       assert.equal(await daTroca, true);
-      assert.equal(post.mock.callCount(), 3);
-      assert.deepEqual(usados, ["token-velho", "token-velho", "token-novo-1"]);
-      assert.equal(post.mock.calls[2].arguments[1].tela, CLIENTE.tela);
+      assert.equal(post.mock.callCount(), 2);
+      assert.deepEqual(usados, ["token-velho", "token-novo-1"]);
+      assert.equal(post.mock.calls[1].arguments[1].tela, CLIENTE.tela);
+    });
+
+    it("a renovação que não adiantou é tentada de novo depois de 5 min (falha passageira)", async () => {
+      mock.timers.enable({ apis: ["Date"], now: INICIO });
+      try {
+        const { estado, post, renovar, enviar } = montarComRenovacao({ renova: "erro" });
+
+        assert.equal(await enviar(ATIVA()), false);
+        mock.timers.tick(NOVA_RENOVACAO_DEPOIS_DE_MS - 1000);
+        assert.equal(await enviar(ATIVA()), false);
+        assert.equal(renovar.mock.callCount(), 1);
+
+        // A rede voltou.
+        renovar.mock.mockImplementation(async () => {
+          estado.token = "token-novo";
+        });
+        mock.timers.tick(1000);
+        assert.equal(await enviar(ATIVA()), true);
+        assert.equal(renovar.mock.callCount(), 2);
+        assert.equal(post.mock.callCount(), 2);
+
+        // Parada, nem depois dos 5 min.
+        estado.token = "token-velho";
+        mock.timers.tick(NOVA_RENOVACAO_DEPOIS_DE_MS);
+        assert.equal(await enviar(PARADA()), false);
+        assert.equal(renovar.mock.callCount(), 2);
+      } finally {
+        mock.timers.reset();
+      }
     });
 
     it("o sinal que chega com a renovação em andamento espera por ela e vai com o access novo", async () => {
@@ -620,6 +650,57 @@ describe("criarEnvioDePresenca", () => {
     });
   });
 
+  it("o sinal que chega com outro no caminho espera por ele: um pedido por vez, na ordem", async () => {
+    const { post, enviar } = montar();
+    const pendentes = [];
+    post.mock.mockImplementation(
+      () => new Promise((resolve) => pendentes.push(() => resolve({ status: 204 }))),
+    );
+    const andar = () => new Promise((resolve) => setImmediate(resolve));
+
+    const primeiro = enviar(SINAL);
+    await andar();
+    const segundo = enviar({ ...CLIENTE, ultimaInteracao: INICIO });
+    await andar();
+    assert.equal(pendentes.length, 1);
+    pendentes.shift()();
+    await andar();
+    assert.equal(pendentes.length, 1);
+    pendentes.shift()();
+
+    assert.deepEqual(await Promise.all([primeiro, segundo]), [true, true]);
+    assert.deepEqual(
+      post.mock.calls.map((c) => c.arguments[1].tela),
+      [FUNIL.tela, CLIENTE.tela],
+    );
+  });
+
+  it("da espera, só o mais novo sai: o do meio já ficou para trás", async () => {
+    const { post, enviar } = montar();
+    const pendentes = [];
+    post.mock.mockImplementation(
+      () => new Promise((resolve) => pendentes.push(() => resolve({ status: 204 }))),
+    );
+    const andar = () => new Promise((resolve) => setImmediate(resolve));
+
+    const primeiro = enviar(SINAL);
+    await andar();
+    const doMeio = enviar({ ...DASHBOARD, ultimaInteracao: INICIO });
+    const ultimo = enviar({ ...CLIENTE, ultimaInteracao: INICIO });
+    pendentes.shift()();
+    await andar();
+    pendentes.shift()();
+
+    assert.deepEqual(await Promise.all([primeiro, doMeio, ultimo]), [true, false, true]);
+    assert.deepEqual(
+      post.mock.calls.map((c) => c.arguments[1]),
+      [
+        { ...FUNIL, ultima_interacao: new Date(INICIO).toISOString() },
+        { ...CLIENTE, ultima_interacao: new Date(INICIO).toISOString() },
+      ],
+    );
+  });
+
   it("o 401 do token velho que chega depois de a tela renovar manda de novo com o novo", async () => {
     const { estado, post, enviar } = montar();
     let responder;
@@ -631,6 +712,7 @@ describe("criarEnvioDePresenca", () => {
     );
 
     const pendente = enviar(SINAL);
+    await new Promise((resolve) => setImmediate(resolve));
     estado.token = "token-novo";
     responder({ status: 401 });
     assert.equal(await pendente, true);

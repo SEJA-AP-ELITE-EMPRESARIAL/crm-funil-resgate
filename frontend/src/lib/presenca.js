@@ -41,6 +41,13 @@ export const TEMPO_MAXIMO_DO_PEDIDO_MS = 15 * 1000;
  * recusou ao sinal. Ver `criarEnvioDePresenca`.
  */
 export const ATIVA_HA_MENOS_DE_MS = 3 * 60 * 1000;
+/**
+ * Depois de uma renovação que não adiantou (o refresh falhou, ou o access novo
+ * também foi recusado), a próxima só sai depois disto: a falha passageira (a
+ * rede, o backend reiniciando) não cala o sinal pelo resto do dia, e a sessão
+ * revogada custa um refresh a cada 5 min, só enquanto a pessoa mexe.
+ */
+export const NOVA_RENOVACAO_DEPOIS_DE_MS = 5 * 60 * 1000;
 
 /**
  * O que conta como interação: clique, tecla e o gesto de rolar (roda do mouse,
@@ -68,12 +75,14 @@ const OPCOES = { capture: true, passive: true };
  *   CRM vence em 4 h, e quem só lê (abrir cartão, trocar de aba e de funil não
  *   chamam a API) sumiria do painel com a aba aberta e em uso. Para ela, o
  *   sinal chama `renovar` (o refresh do `api.js`, sem sair do sistema na
- *   falha) e manda de novo com o access novo. Uma renovação só entre dois
- *   sinais aceitos: se ela falhar, ou o access novo também for recusado, o
- *   sinal fica calado até o token mudar por fora. A aba esquecida não renova.
- * - Dois sinais ao mesmo tempo (o do minuto ainda no caminho e a troca de
- *   tela): a renovação é uma só, dividida, e só o sinal mais novo é mandado
- *   depois dela; o mais velho levaria ao painel a tela de antes.
+ *   falha) e manda de novo com o access novo. Se ela não adiantar (o refresh
+ *   falhou, ou o access novo também foi recusado), a próxima só depois de
+ *   `NOVA_RENOVACAO_DEPOIS_DE_MS`, e o sinal fica calado até lá (ou até o
+ *   token mudar por fora). A aba esquecida não renova.
+ * - Um pedido por vez, na ordem: o sinal que chega com outro no caminho (a
+ *   troca de tela com o do minuto) espera por ele, e só o mais novo da espera
+ *   sai. Dois pedidos juntos poderiam chegar ao Conecta invertidos e deixar no
+ *   painel a tela de antes.
  * - Nada mais é repetido aqui: o próximo sinal sai no minuto seguinte.
  *
  * @param {object} p
@@ -83,11 +92,12 @@ const OPCOES = { capture: true, passive: true };
  */
 export function criarEnvioDePresenca({ post, tokenAtual, renovar = null }) {
   let tokenRecusado = null;
-  let podeRenovar = true;
-  // A renovação em andamento, para o outro sinal esperar por ela em vez de desistir.
-  let renovacao = null;
-  // O número do sinal mais novo: só ele é mandado depois de uma espera.
+  // Antes disto, nada de renovar (ver `NOVA_RENOVACAO_DEPOIS_DE_MS`); 0 = pode.
+  let renovarSoDepoisDe = 0;
+  // O número do sinal mais novo: só ele sai depois de uma espera.
   let ultimoSinal = 0;
+  // O pedido no caminho; o próximo sai depois dele.
+  let fila = Promise.resolve();
 
   async function postar(corpo) {
     const token = tokenAtual();
@@ -96,11 +106,24 @@ export function criarEnvioDePresenca({ post, tokenAtual, renovar = null }) {
       validateStatus: () => true,
     });
     if (resposta?.status === 401) tokenRecusado = token;
-    if (resposta?.status === 204) podeRenovar = true;
+    if (resposta?.status === 204) renovarSoDepoisDe = 0;
     return resposta?.status;
   }
 
-  async function renovarAgora() {
+  /**
+   * `true` se há um access que o backend ainda não recusou para mandar: um que
+   * a tela trocou nesse meio-tempo, ou o da renovação feita agora.
+   */
+  async function haTokenNovo(ultimaInteracao) {
+    const atual = tokenAtual();
+    if (!atual) return false;
+    if (atual !== tokenRecusado) return true;
+    if (!renovar || Date.now() < renovarSoDepoisDe) return false;
+    if (!Number.isFinite(ultimaInteracao) || Date.now() - ultimaInteracao >= ATIVA_HA_MENOS_DE_MS) {
+      return false;
+    }
+    // Volta a 0 no primeiro sinal aceito com o access novo.
+    renovarSoDepoisDe = Date.now() + NOVA_RENOVACAO_DEPOIS_DE_MS;
     try {
       await renovar();
     } catch {
@@ -110,50 +133,30 @@ export function criarEnvioDePresenca({ post, tokenAtual, renovar = null }) {
     return Boolean(novo) && novo !== tokenRecusado;
   }
 
-  /**
-   * `true` se há um access que o backend ainda não recusou para mandar: o de
-   * uma renovação (esta, ou a de outro sinal em andamento) ou um que a tela
-   * trocou nesse meio-tempo.
-   */
-  async function haTokenNovo(ultimaInteracao) {
-    if (renovacao) return renovacao;
-    const atual = tokenAtual();
-    if (!atual) return false;
-    if (atual !== tokenRecusado) return true;
-    if (!renovar || !podeRenovar) return false;
-    if (!Number.isFinite(ultimaInteracao) || Date.now() - ultimaInteracao >= ATIVA_HA_MENOS_DE_MS) {
-      return false;
+  async function enviarUm(este, { modulo, tela, ultimaInteracao }) {
+    if (este !== ultimoSinal) return false;
+    if (!tokenAtual()) return false;
+    if (typeof tela !== "string" || !tela) return false;
+    const corpo = { modulo: typeof modulo === "string" ? modulo : "", tela };
+    // Fora do intervalo do `Date` o `toISOString` lançaria: aí o sinal vai sem ela.
+    const quando = Number.isFinite(ultimaInteracao) ? new Date(ultimaInteracao) : null;
+    if (quando && !Number.isNaN(quando.getTime())) corpo.ultima_interacao = quando.toISOString();
+    if (tokenAtual() === tokenRecusado) {
+      if (!(await haTokenNovo(ultimaInteracao)) || este !== ultimoSinal) return false;
     }
-    podeRenovar = false;
-    renovacao = renovarAgora();
-    try {
-      return await renovacao;
-    } finally {
-      renovacao = null;
+    let status = await postar(corpo);
+    if (status === 401 && (await haTokenNovo(ultimaInteracao)) && este === ultimoSinal) {
+      status = await postar(corpo);
     }
+    return status === 204;
   }
 
-  return async function enviarPresenca({ modulo, tela, ultimaInteracao = null }) {
-    try {
-      ultimoSinal += 1;
-      const este = ultimoSinal;
-      if (!tokenAtual()) return false;
-      if (typeof tela !== "string" || !tela) return false;
-      const corpo = { modulo: typeof modulo === "string" ? modulo : "", tela };
-      // Fora do intervalo do `Date` o `toISOString` lançaria: aí o sinal vai sem ela.
-      const quando = Number.isFinite(ultimaInteracao) ? new Date(ultimaInteracao) : null;
-      if (quando && !Number.isNaN(quando.getTime())) corpo.ultima_interacao = quando.toISOString();
-      if (renovacao || tokenAtual() === tokenRecusado) {
-        if (!(await haTokenNovo(ultimaInteracao)) || este !== ultimoSinal) return false;
-      }
-      let status = await postar(corpo);
-      if (status === 401 && (await haTokenNovo(ultimaInteracao)) && este === ultimoSinal) {
-        status = await postar(corpo);
-      }
-      return status === 204;
-    } catch {
-      return false;
-    }
+  return function enviarPresenca({ modulo, tela, ultimaInteracao = null }) {
+    ultimoSinal += 1;
+    const este = ultimoSinal;
+    const vez = fila.then(() => enviarUm(este, { modulo, tela, ultimaInteracao })).catch(() => false);
+    fila = vez;
+    return vez;
   };
 }
 
