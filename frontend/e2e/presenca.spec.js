@@ -381,7 +381,7 @@ test("o access vencido: quem está parado não renova; quem mexe renova em silê
   await printDoPainel(context, "11-painel-falso-access-renovado.png");
 });
 
-test("a renovação recusada não tira ninguém do sistema nem é tentada de novo", async ({
+test("a renovação recusada não tira ninguém do sistema nem é tentada de novo antes de 5 min", async ({
   page,
   request,
 }) => {
