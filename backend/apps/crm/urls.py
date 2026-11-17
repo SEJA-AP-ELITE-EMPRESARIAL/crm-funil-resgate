@@ -7,6 +7,7 @@ from apps.crm.views import (
     etapa_views,
     funil_views,
     import_views,
+    presenca_views,
 )
 
 app_name = "crm"
@@ -19,6 +20,8 @@ urlpatterns = [
     path("senha/", auth_views.trocar_senha, name="trocar_senha"),
     path("senha/definir/", auth_views.definir_senha, name="definir_senha"),
     path("senha/esqueci/", auth_views.esqueci_senha, name="esqueci_senha"),
+    # Sinal de presença da tela, repassado ao Conecta (TSK-1521)
+    path("presenca/", presenca_views.presenca, name="presenca"),
     # Funis (quadros)
     path("funis/", funil_views.funil_root, name="funil_root"),
     path("funis/<int:funil_id>/", funil_views.funil_item, name="funil_item"),
