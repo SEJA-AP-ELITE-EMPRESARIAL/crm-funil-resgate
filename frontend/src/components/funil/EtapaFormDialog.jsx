@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 
 import { CORES_SUGERIDAS, TIPOS } from "@/lib/stages";
+import { useDetalheDaTela } from "@/lib/useTelaAtual";
 import { useClientesData } from "@/contexts/ClientesContext";
 
 const VAZIO = { nome: "", emoji: "", cor: CORES_SUGERIDAS[0], tipo: "progressao" };
@@ -32,6 +33,7 @@ export function EtapaFormDialog({ open, etapa, onClose }) {
   const [salvando, setSalvando] = useState(false);
 
   const editando = !!etapa;
+  useDetalheDaTela(open, editando ? "edicaoDeColuna" : "novaColuna"); // sinal de presença (TSK-1521)
 
   useEffect(() => {
     if (!open) return;

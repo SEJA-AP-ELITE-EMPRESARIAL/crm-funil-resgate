@@ -264,10 +264,17 @@ function limparDadosDeRastro(dados) {
   return limpos;
 }
 
+// O sinal de presença (TSK-1521) sai uma vez por minuto com a aba aberta: em
+// poucas horas, ele tomaria os 100 rastros que o SDK guarda e empurraria para
+// fora os que contam o caminho até o erro.
+const ROTA_DA_PRESENCA = /\/api\/crm\/presenca\/?$/;
+
 /** `beforeBreadcrumb`: rastro de rede e de navegação sem query string. */
 export function limparRastro(rastro) {
   if (!rastro) return rastro;
   if (rastro.category === "console" || (rastro.category || "").startsWith("ui.")) return null;
+  const rede = rastro.category === "xhr" || rastro.category === "fetch";
+  if (rede && ROTA_DA_PRESENCA.test(semQuery(rastro.data?.url) || "")) return null;
   return { ...rastro, data: limparDadosDeRastro(rastro.data) };
 }
 

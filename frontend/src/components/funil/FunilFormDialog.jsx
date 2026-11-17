@@ -26,6 +26,7 @@ import {
 } from "@mui/material";
 
 import { CORES_SUGERIDAS } from "@/lib/stages";
+import { useDetalheDaTela } from "@/lib/useTelaAtual";
 import { useClientesData } from "@/contexts/ClientesContext";
 
 const VAZIO = { nome: "", cor: CORES_SUGERIDAS[0], descricao: "" };
@@ -38,6 +39,7 @@ export function FunilFormDialog({ open, funil, onClose }) {
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
 
   const editando = !!funil;
+  useDetalheDaTela(open, editando ? "edicaoDoFunil" : "novoFunil"); // sinal de presença (TSK-1521)
   const totalColunas = funil?.etapas?.length ?? 0;
   const totalClientes = funil?.total_clientes ?? 0;
 

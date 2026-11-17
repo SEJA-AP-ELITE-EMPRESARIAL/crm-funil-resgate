@@ -35,6 +35,7 @@ import { ImportarDialog } from "@/components/funil/ImportarDialog";
 import { KanbanBoard } from "@/components/funil/KanbanBoard";
 import { useAuth } from "@/contexts/AuthContext";
 import { ClientesProvider, useClientesData } from "@/contexts/ClientesContext";
+import { useTelaDoFunil } from "@/lib/useTelaAtual";
 
 const MAX_W = 1600;
 
@@ -43,9 +44,13 @@ const NOVO_FUNIL = "__novo__";
 
 function FunilInner() {
   const { user, logout } = useAuth();
-  const { clientesDoFunil: clientes, etapas, funis, funilSel, setFunilSel, funilAtivo } =
+  const { clientesDoFunil: clientes, etapas, funis, funilSel, setFunilSel, funilAtivo, loading } =
     useClientesData();
   const [tab, setTab] = useState("kanban");
+  // Onde a pessoa está, para o sinal de presença (TSK-1521). Pronta quando o
+  // funil é conhecido, ou quando a base carregou sem funil nenhum: o `reload`
+  // depois de salvar põe o `loading` de volta, e o funil continua lá.
+  useTelaDoFunil({ pronta: !!funilAtivo || !loading, aba: tab, funil: funilAtivo?.nome });
   const [search, setSearch] = useState("");
   const [consultor, setConsultor] = useState("all");
   const [motivo, setMotivo] = useState("all");
