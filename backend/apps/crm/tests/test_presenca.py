@@ -19,6 +19,7 @@ O Conecta nunca sobe aqui: ou `enviar_presenca` é trocado por um mock, ou a
 saída de rede do cliente (`_abrir`) é.
 """
 import json
+import os
 import re
 import urllib.error
 import uuid
@@ -243,6 +244,7 @@ class CorpoInvalidoTest(BasePresenca):
         "interação impossível": {"tela": "Kanban", "ultima_interacao": "2026-13-17T14:03:12Z"},
         "interação em milissegundos": {"tela": "Kanban", "ultima_interacao": 1795442592345},
         "interação vazia": {"tela": "Kanban", "ultima_interacao": ""},
+        "interação longa demais": {"tela": "Kanban", "ultima_interacao": "2" * 65},
         "lista no lugar do objeto": [SINAL],
         "texto no lugar do objeto": "Kanban",
     }
@@ -398,6 +400,10 @@ class LimiteTest(BasePresenca):
     """O limite é por pessoa (`CRM_PRESENCA_RATE`, 20/min em produção)."""
 
     def test_vinte_por_minuto_por_padrao(self):
+        # O settings lê o .env: quem roda a suíte com a variável definida não
+        # está testando o padrão.
+        if os.environ.get("CRM_PRESENCA_RATE"):
+            self.skipTest("CRM_PRESENCA_RATE definido no ambiente")
         self.assertEqual(settings.CRM_PRESENCA_RATE, "20/min")
 
     @override_settings(CRM_PRESENCA_RATE="2/min")
