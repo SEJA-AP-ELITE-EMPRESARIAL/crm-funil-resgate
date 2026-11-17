@@ -60,6 +60,8 @@ describe("telaDaRota", () => {
     assert.equal(tela("Funil de Resgate"), "Funil de Resgate");
     assert.equal(tela("funil APN"), "funil APN");
     assert.equal(tela("Funilaria"), "Funil Funilaria");
+    assert.equal(tela("Funilária"), "Funil Funilária");
+    assert.equal(tela("FUNIL: Resgate"), "FUNIL: Resgate");
   });
 
   it("sem funil nenhum, e aba desconhecida vira Kanban", () => {

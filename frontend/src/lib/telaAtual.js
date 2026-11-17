@@ -61,8 +61,9 @@ export function textoCurto(valor, limite) {
 function nomeDoFunil(nome) {
   const limpo = textoCurto(nome, 80);
   if (!limpo) return "";
-  // "Funil Resgate", mas não "Funil Funil de Resgate".
-  return /^funil\b/i.test(limpo) ? limpo : `Funil ${limpo}`;
+  // "Funil Resgate", mas não "Funil Funil de Resgate". Sem `\b`: no JS ele
+  // vê fronteira de palavra antes do "á" de "Funilária".
+  return /^funil(?![\p{L}\p{N}_])/iu.test(limpo) ? limpo : `Funil ${limpo}`;
 }
 
 function telaDoFunil(pagina, detalhe) {
