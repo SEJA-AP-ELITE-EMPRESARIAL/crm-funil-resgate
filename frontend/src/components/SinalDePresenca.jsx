@@ -8,8 +8,8 @@
  * código (o nginx o manda ao backend), e a rota do sinal recusa a sessão dele.
  *
  * O erro do sinal nunca aparece para a pessoa: sem aviso e sem sair da sessão.
- * A sessão só é renovada para quem está mexendo na tela, quando o access
- * venceu (ver `lib/presenca.js`). Não desenha nada.
+ * A sessão só é renovada para quem está mexendo na tela, quando o backend
+ * recusa o access (ver `lib/presenca.js`). Não desenha nada.
  */
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useLocation } from "react-router-dom";

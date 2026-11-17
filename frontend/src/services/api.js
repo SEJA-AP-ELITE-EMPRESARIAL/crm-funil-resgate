@@ -57,6 +57,9 @@ async function refreshAccessToken() {
   if (!refresh) throw new Error("sem refresh token");
   // Usa axios cru para não recursar no interceptor.
   const { data } = await axios.post(`${getApiBaseUrl()}/api/token/refresh/`, { refresh });
+  // A pessoa saiu (ou entrou outra) enquanto o refresh ia e voltava: gravar o
+  // access agora a devolveria ao sistema.
+  if (getRefreshToken() !== refresh) throw new Error("a sessão mudou durante a renovação");
   setTokens({ access: data.access });
   return data.access;
 }
